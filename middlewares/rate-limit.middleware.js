@@ -75,10 +75,21 @@ export function rateLimit(windowMs = DEFAULT_WINDOW_MS, maxRequests = DEFAULT_MA
       }
 
       // Increment counter
+      // await Promise.race([
+      //   redis.set(rateKey, requestCount + 1, 'PX', windowMs),
+      //   new Promise((_, reject) => setTimeout(() => reject(new Error('Redis timeout')), 500))
+      // ]);
       await Promise.race([
-        redis.set(rateKey, requestCount + 1, 'PX', windowMs),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Redis timeout')), 500))
-      ]);
+  redis.set(
+    rateKey,
+    String(requestCount + 1),
+    {
+      PX: windowMs,
+    }
+  ),
+  new Promise((_, reject) => setTimeout(() => reject(new Error('Redis timeout')), 500))
+]);
+
 
       next();
     } catch (error) {
