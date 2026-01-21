@@ -23,34 +23,61 @@ if (process.env.SENTRY_DSN) {
 }
 
 // CORS configuration - MUST be before other middleware that might block preflight requests
+// app.use(cors({
+//   origin: function (origin, callback) {
+//     // Allow requests with no origin (like mobile apps or curl requests)
+//     if (!origin) return callback(null, true);
+    
+//     // List of allowed origins
+//     const allowedOrigins = [
+//       'http://localhost:3000',
+//       'http://localhost:3001',
+//       'http://127.0.0.1:3000',
+//       'http://127.0.0.1:3001',
+//       'https://dme-frontend.vercel.app', // Vercel deployment
+//       'https://www.dailymindeducation.com', // Production domain
+//       process.env.FRONTEND_URL
+//     ].filter(Boolean);
+    
+//     // Allow if origin is in allowed list or if in development mode
+//     if (allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+//       callback(null, true);
+//     } else {
+//       callback(new Error('Not allowed by CORS'));
+//     }
+//   },
+//   credentials: true, // Enable credentials (cookies, authorization headers, etc.)
+//   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+//   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+//   exposedHeaders: ['Authorization'],
+//   optionsSuccessStatus: 200 // Some legacy browsers (IE11) choke on 204
+// }));
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'https://dme-frontend.vercel.app',
+  'https://www.dailymindeducation.com',
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
 app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
+  origin: function(origin, callback) {
+    // allow non-browser requests (curl, Postman)
     if (!origin) return callback(null, true);
-    
-    // List of allowed origins
-    const allowedOrigins = [
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'http://127.0.0.1:3000',
-      'http://127.0.0.1:3001',
-      'https://dme-frontend.vercel.app', // Vercel deployment
-      'https://www.dailymindeducation.com', // Production domain
-      process.env.FRONTEND_URL
-    ].filter(Boolean);
-    
-    // Allow if origin is in allowed list or if in development mode
-    if (allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
+
+    // allow if in allowed list
+    if (allowedOrigins.some(o => o === origin)) {
+      return callback(null, true);
     }
+
+    console.warn(`Blocked CORS request from: ${origin}`);
+    return callback(new Error('Not allowed by CORS'));
   },
-  credentials: true, // Enable credentials (cookies, authorization headers, etc.)
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
   exposedHeaders: ['Authorization'],
-  optionsSuccessStatus: 200 // Some legacy browsers (IE11) choke on 204
+  optionsSuccessStatus: 200
 }));
 
 // Compression middleware for better performance
