@@ -10,7 +10,19 @@ const envSchema = Joi.object({
   MONGODB_URI: Joi.string().when('NODE_ENV', { is: 'production', then: Joi.required(), otherwise: Joi.string().default('mongodb://localhost:27017/dme') }),
 
   // Redis
-  REDIS_URL: Joi.string().default('redis://localhost:6379'),
+  // REDIS_URL: Joi.string().default('redis://localhost:6379'),
+  // Redis (Upstash REST)
+UPSTASH_REDIS_REST_URL: Joi.string().when('NODE_ENV', {
+  is: 'production',
+  then: Joi.required(),
+  otherwise: Joi.string().optional()
+}),
+UPSTASH_REDIS_REST_TOKEN: Joi.string().when('NODE_ENV', {
+  is: 'production',
+  then: Joi.required(),
+  otherwise: Joi.string().optional()
+}),
+
 
   // JWT
   JWT_SECRET: Joi.string().when('NODE_ENV', { is: 'production', then: Joi.required(), otherwise: Joi.string().default('dev_jwt_secret') }),
