@@ -274,7 +274,12 @@ router.get("/winners", quizListRateLimit, async (req, res) => {
     const cacheKey = `winners:${today}`;
     const cached = await redis.get(cacheKey);
     if (cached) {
-      return res.json(JSON.parse(cached));
+      try {
+        return res.json(JSON.parse(cached));
+      } catch (parseError) {
+        console.warn('Invalid cached data, fetching from DB');
+        // Continue to fetch from DB
+      }
     }
     
     let query = { quizDate: today };
