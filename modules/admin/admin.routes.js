@@ -1,0 +1,918 @@
+// modules/admin/admin.routes.js
+import express from "express";
+import mongoose from "mongoose";
+import multer from "multer";
+import Quiz from "../quiz/quiz.model.js";
+import Question from "../quiz/question.model.js";
+import Winner from "../quiz/winner.model.js";
+import QuizAttempt from "../quiz/quizAttempt.model.js";
+import User from "../user/user.model.js";
+import Payment from "../payment/payment.model.js";
+import * as BlogService from "../blog/blog.service.js";
+import { authRequired, roleRequired } from "../../middlewares/auth.middleware.js";
+import * as QuizService from "../quiz/quiz.service.js";
+import { logAdminAction, getAdminAuditLog, getAuditTrail } from "./adminAudit.service.js";
+
+const router = express.Router();
+
+// Configure multer for CSV upload
+const upload = multer({ 
+  dest: 'uploads/',
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only CSV files are allowed'), false);
+    }
+  },
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+});
+
+// Apply admin role check to all routes
+router.use(authRequired, roleRequired(["QUIZ_ADMIN", "CONTENT_ADMIN", "SUPER_ADMIN"]));
+
+// Bulk create questions (QUIZ_ADMIN or SUPER_ADMIN)
+router.post("/questions/bulk", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const { questions } = req.body;
+
+    if (!questions || !Array.isArray(questions) || questions.length === 0) {
+      return res.status(400).json({
+        message: 'Questions array is required and must not be empty'
+      });
+    }
+
+    // Validate each question
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      if (!q.question || !Array.isArray(q.options) || q.options.length !== 4 ||
+          typeof q.correctIndex !== 'number' || q.correctIndex < 0 || q.correctIndex > 3) {
+        return res.status(400).json({
+          message: `Question ${i + 1} is invalid. Each question must have: question text, 4 options array, and correctIndex (0-3).`
+        });
+      }
+    }
+
+    // Create questions in bulk
+    const createdQuestions = await Question.insertMany(questions);
+
+    // Return the IDs
+    const questionIds = createdQuestions.map(q => q._id);
+
+    // Note: Admin audit logging for questions creation is skipped for now
+    // await logAdminAction(req.user._id, 'QUESTIONS_CREATED', 'QUESTION', null, { count: questionIds.length }, req);
+
+    res.json({
+      message: `Successfully created ${questionIds.length} questions`,
+      questionIds: questionIds
+    });
+  } catch (error) {
+    console.error('Bulk questions creation error:', error);
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Quiz management (QUIZ_ADMIN or SUPER_ADMIN)
+router.post("/quiz", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const now = new Date();
+    const istTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
+    const lockTime = new Date(istTime);
+    lockTime.setHours(19, 50, 0, 0); // 7:50 PM IST
+
+    // Prevent quiz creation/modification after 7:50 PM IST
+    if (istTime >= lockTime) {
+      return res.status(400).json({
+        message: 'Quiz questions are locked after 7:50 PM IST. No modifications allowed.'
+      });
+    }
+
+    // Validate that exactly 50 question IDs are provided
+    if (!req.body.questions || !Array.isArray(req.body.questions) || req.body.questions.length !== 50) {
+      return res.status(400).json({
+        message: 'Quiz must have exactly 50 question IDs. Please provide all 50 question IDs.'
+      });
+    }
+
+    // Validate that all questions are valid ObjectIds and exist
+    for (let i = 0; i < req.body.questions.length; i++) {
+      const questionId = req.body.questions[i];
+      if (!mongoose.Types.ObjectId.isValid(questionId)) {
+        return res.status(400).json({
+          message: `Question ID ${i + 1} is not a valid ObjectId: ${questionId}`
+        });
+      }
+    }
+
+    // Verify all questions exist
+    const existingQuestions = await Question.find({
+      _id: { $in: req.body.questions }
+    });
+
+    if (existingQuestions.length !== req.body.questions.length) {
+      return res.status(400).json({
+        message: `Some questions do not exist. Found ${existingQuestions.length} out of ${req.body.questions.length} questions.`
+      });
+    }
+
+    // Validate classGrade
+    if (req.body.classGrade && !['10th', '12th', 'Other', 'ALL'].includes(req.body.classGrade)) {
+      return res.status(400).json({
+        message: 'Invalid classGrade. Must be one of: 10th, 12th, Other, ALL'
+      });
+    }
+
+    const existingQuiz = await Quiz.findOne({ quizDate: today });
+
+    if (existingQuiz && ['LIVE', 'ENDED', 'RESULT_PUBLISHED'].includes(existingQuiz.state)) {
+      return res.status(400).json({ message: 'Cannot modify quiz that is already live or completed' });
+    }
+
+    // Delete existing quiz if it's in DRAFT state (allows recreation)
+    if (existingQuiz && existingQuiz.state === 'DRAFT') {
+      await Quiz.deleteOne({ _id: existingQuiz._id });
+    }
+
+    // Create quiz with question IDs
+    const quiz = await Quiz.create({
+      quizDate: today,
+      questions: req.body.questions,
+      state: 'SCHEDULED',
+    });
+
+    await logAdminAction(req.user._id, 'QUIZ_CREATED', 'QUIZ', quiz.quizDate, { questionsCount: quiz.questions.length }, req);
+    res.json(quiz);
+  } catch (error) {
+    console.error('Quiz creation error:', error);
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// CSV Upload for Quiz Questions (QUIZ_ADMIN or SUPER_ADMIN)
+router.post("/quiz/upload", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), upload.single('csv'), async (req, res) => {
+  try {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const now = new Date();
+    const istTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
+    const lockTime = new Date(istTime);
+    lockTime.setHours(19, 50, 0, 0); // 7:50 PM IST
+
+    // Prevent quiz creation/modification after 7:50 PM IST
+    if (istTime >= lockTime) {
+      return res.status(400).json({
+        message: 'Quiz questions are locked after 7:50 PM IST. No modifications allowed.'
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'CSV file is required' });
+    }
+
+    // Parse CSV file using csv-parser
+    const fs = await import('fs');
+    const { default: csv } = await import('csv-parser');
+    
+    const questions = [];
+    let rowCount = 0;
+    
+    return new Promise((resolve, reject) => {
+      fs.createReadStream(req.file.path)
+        .pipe(csv())
+        .on('data', (row) => {
+          rowCount++;
+          // Skip header
+          if (rowCount === 1) return;
+          
+          const { question, optionA, optionB, optionC, optionD, correctAnswer } = row;
+          
+          if (!question || !optionA || !optionB || !optionC || !optionD || correctAnswer === undefined) {
+            reject(new Error(`Invalid CSV format at row ${rowCount}. Missing required fields.`));
+            return;
+          }
+          
+          let correctIndex;
+          const correctAnswerStr = String(correctAnswer).trim().toUpperCase();
+          
+          if (['1', '2', '3', '4'].includes(correctAnswerStr)) {
+            correctIndex = parseInt(correctAnswerStr) - 1;
+          } else if (['A', 'B', 'C', 'D'].includes(correctAnswerStr)) {
+            correctIndex = correctAnswerStr.charCodeAt(0) - 'A'.charCodeAt(0);
+          } else {
+            console.error(`Invalid correctAnswer value: "${correctAnswer}", normalized: "${correctAnswerStr}"`);
+            reject(new Error(`Invalid correct answer at row ${rowCount}. Must be 1-4 or A-D. Got: "${correctAnswer}"`));
+            return;
+          }
+          
+          if (correctIndex < 0 || correctIndex > 3) {
+            reject(new Error(`Invalid correct answer at row ${rowCount}. Must be 1-4 or A-D. Got: "${correctAnswer}"`));
+            return;
+          }
+
+          questions.push({
+            question: question.trim(),
+            options: [optionA.trim(), optionB.trim(), optionC.trim(), optionD.trim()],
+            correctIndex: correctIndex
+          });
+        })
+        .on('end', async () => {
+          try {
+            // Delete uploaded file
+            fs.unlinkSync(req.file.path);
+
+            if (questions.length !== 50) {
+              resolve(res.status(400).json({ 
+                message: `CSV must contain exactly 50 questions. Found: ${questions.length}` 
+              }));
+              return;
+            }
+
+            // Delete existing quiz if it's in CREATED state
+            const existingQuiz = await Quiz.findOne({ quizDate: today });
+            if (existingQuiz && ['LIVE', 'CLOSED', 'FINALIZED'].includes(existingQuiz.state)) {
+              resolve(res.status(400).json({ message: 'Cannot modify quiz that is already live or completed' }));
+              return;
+            }
+            if (existingQuiz && existingQuiz.state === 'CREATED') {
+              await Quiz.deleteOne({ _id: existingQuiz._id });
+            }
+
+            // Create quiz
+            const quiz = await Quiz.create({
+              quizDate: today,
+              questions: questions,
+              state: 'LOCKED', // Create in LOCKED state to prevent auto-start
+              tier: 'BRONZE',
+              minStreakRequired: 0,
+              subscriptionRequired: 'FREE',
+              classGrade: req.body.classGrade || 'ALL' // Default to ALL classes if not specified
+            });
+
+            await logAdminAction(req.user._id, 'QUIZ_CREATED_CSV', 'QUIZ', quiz.quizDate, { questionsCount: quiz.questions.length, source: 'CSV' }, req);
+            resolve(res.json({ message: 'Quiz created successfully from CSV', quiz }));
+          } catch (error) {
+            reject(error);
+          }
+        })
+        .on('error', (error) => {
+          reject(error);
+        });
+    });
+  } catch (error) {
+    console.error('CSV upload error:', error);
+    res.status(500).json({ message: error.message || 'Failed to process CSV file' });
+  }
+});
+
+router.get("/quiz/status", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const quiz = await Quiz.findOne({ quizDate: today });
+    if (quiz) {
+      // Populate questions for display
+      await quiz.populate('questions');
+      res.json(quiz);
+    } else {
+      res.json({ quizDate: today, state: null });
+    }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.put("/quiz/:quizDate/lock", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const quiz = await QuizService.lockQuiz(req.params.quizDate);
+    await logAdminAction(req.user._id, 'QUIZ_LOCKED', 'QUIZ', req.params.quizDate, { status: 'LOCKED' }, req);
+    res.json(quiz);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+router.put("/quiz/:quizDate/start", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const quiz = await QuizService.startQuiz(req.params.quizDate);
+    await logAdminAction(req.user._id, 'QUIZ_STARTED', 'QUIZ', req.params.quizDate, { status: 'LIVE' }, req);
+    res.json(quiz);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+router.put("/quiz/:quizDate/end", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const quiz = await QuizService.endQuiz(req.params.quizDate);
+    await logAdminAction(req.user._id, 'QUIZ_ENDED', 'QUIZ', req.params.quizDate, { status: 'CLOSED' }, req);
+    res.json(quiz);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Blog approval (CONTENT_ADMIN or SUPER_ADMIN)
+router.get("/blogs/pending", roleRequired(["CONTENT_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    console.log('🔍 Admin blogs/pending endpoint called');
+    console.log('🔍 User:', req.user ? { id: req.user._id, role: req.user.role, name: req.user.name } : 'No user');
+    
+    const blogs = await BlogService.getPendingBlogs();
+    console.log('🔍 Found pending blogs:', blogs.length);
+    
+    res.json(blogs);
+  } catch (error) {
+    console.error('❌ Error in blogs/pending:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.put("/blogs/:blogId/approve", roleRequired(["CONTENT_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const blog = await BlogService.updateBlogStatus(req.params.blogId, "APPROVED", req.user._id);
+    res.json(blog);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+router.put("/blogs/:blogId/reject", roleRequired(["CONTENT_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const blog = await BlogService.updateBlogStatus(req.params.blogId, "REJECTED", req.user._id);
+    res.json(blog);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// User management (SUPER_ADMIN only)
+router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const { page = 1, limit = 20, search, role, status } = req.query;
+    const query = {};
+
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    if (role) query.role = role;
+    if (status === 'blocked') query.isBlocked = true;
+    else if (status === 'active') query.isBlocked = false;
+
+    const users = await User.find(query)
+      .select('-passwordHash')
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    const total = await User.countDocuments(query);
+
+    res.json({
+      users,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.post("/users/:userId/block", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    user.isBlocked = true;
+    await user.save();
+
+    await logAdminAction(req.user._id, 'USER_BLOCKED', 'USER', user._id, { reason: req.body.reason }, req);
+    res.json({ success: true, message: 'User blocked successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.post("/users/:userId/unblock", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    user.isBlocked = false;
+    await user.save();
+
+    await logAdminAction(req.user._id, 'USER_UNBLOCKED', 'USER', user._id, {}, req);
+    res.json({ success: true, message: 'User unblocked successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.delete("/users/:userId", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // Soft delete - mark as blocked and anonymize
+    user.isBlocked = true;
+    user.name = 'Deleted User';
+    user.phone = null;
+    user.email = null;
+    await user.save();
+
+    await logAdminAction(req.user._id, 'USER_DELETED', 'USER', user._id, {}, req);
+    res.json({ success: true, message: 'User deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// User management (SUPER_ADMIN only)
+router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const { page = 1, limit = 20, search, role, status } = req.query;
+    const query = {};
+
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    if (role) query.role = role;
+    if (status === 'blocked') query.isBlocked = true;
+    else if (status === 'active') query.isBlocked = false;
+
+    const users = await User.find(query)
+      .select('-passwordHash')
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    const total = await User.countDocuments(query);
+
+    res.json({
+      users,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.post("/users/:userId/block", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    user.isBlocked = true;
+    await user.save();
+
+    await logAdminAction(req.user._id, 'USER_BLOCKED', 'USER', user._id, { reason: req.body.reason }, req);
+    res.json({ success: true, message: 'User blocked successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.post("/users/:userId/unblock", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    user.isBlocked = false;
+    await user.save();
+
+    await logAdminAction(req.user._id, 'USER_UNBLOCKED', 'USER', user._id, {}, req);
+    res.json({ success: true, message: 'User unblocked successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.delete("/users/:userId", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // Soft delete - mark as blocked and anonymize
+    user.isBlocked = true;
+    user.name = 'Deleted User';
+    user.phone = null;
+    user.email = null;
+    await user.save();
+
+    await logAdminAction(req.user._id, 'USER_DELETED', 'USER', user._id, {}, req);
+    res.json({ success: true, message: 'User deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const users = await User.find().select('-passwordHash');
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Payments (SUPER_ADMIN only)
+router.get("/payments", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const payments = await Payment.find().populate('user', 'name phone');
+    res.json(payments);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Refunds (SUPER_ADMIN) - list and process
+router.get('/refunds', roleRequired(['SUPER_ADMIN']), async (req, res) => {
+  try {
+    const { getAllRefunds } = await import('../payment/payment.service.js');
+    const refunds = await getAllRefunds();
+    res.json(refunds);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.post('/refunds/:refundId/process', roleRequired(['SUPER_ADMIN']), async (req, res) => {
+  try {
+    const { adminProcessRefund } = await import('../payment/payment.service.js');
+    const result = await adminProcessRefund(req.params.refundId, req.user._id);
+    await logAdminAction(req.user._id, 'REFUND_PROCESS_REQUESTED', 'REFUND', req.params.refundId, { result }, req);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.put('/refunds/:refundId/status', roleRequired(['SUPER_ADMIN']), async (req, res) => {
+  try {
+    const Refund = (await import('../payment/refund.model.js')).default;
+    const refund = await Refund.findById(req.params.refundId);
+    if (!refund) return res.status(404).json({ message: 'Refund not found' });
+
+    const { status } = req.body;
+    if (!['REQUESTED','PROCESSING','COMPLETED','FAILED'].includes(status)) return res.status(400).json({ message: 'Invalid status' });
+
+    refund.status = status;
+    await refund.save();
+    await logAdminAction(req.user._id, 'REFUND_STATUS_UPDATED', 'REFUND', refund._id, { status }, req);
+    res.json({ success: true, refund });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Winners (QUIZ_ADMIN or SUPER_ADMIN)
+router.get("/winners", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const { date } = req.query;
+    const quizDate = date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    
+    const winners = await Winner.find({ quizDate })
+      .populate('user', 'name phone email profileImage fullName username')
+      .sort({ rank: 1 })
+      .limit(20);
+    
+    // Get total participants
+    const totalParticipants = await QuizAttempt.countDocuments({ quizDate, answersSaved: true });
+    
+    res.json({
+      winners: winners.map(w => ({
+        _id: w._id,
+        rank: w.rank,
+        score: w.score,
+        totalTimeMs: w.totalTimeMs,
+        accuracy: w.score > 0 ? ((w.score / 50) * 100).toFixed(2) : 0,
+        user: w.user ? {
+          _id: w.user._id,
+          name: w.user.name || w.user.fullName || w.user.username || 'Unknown',
+          phone: w.user.phone,
+          email: w.user.email,
+          profileImage: w.user.profileImage
+        } : null,
+        quizDate: w.quizDate
+      })),
+      quizDate,
+      totalParticipants
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Admin Audit Logs (SUPER_ADMIN only)
+router.get("/audit", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const { adminId, action, limit = 100 } = req.query;
+    const logs = await getAdminAuditLog(adminId, action, parseInt(limit));
+    res.json(logs);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get("/audit/trail/:targetType/:targetId", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const { targetType, targetId } = req.params;
+    const trail = await getAuditTrail(targetType, targetId);
+    res.json(trail);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Dashboard statistics
+router.get("/dashboard", authRequired, roleRequired(["QUIZ_ADMIN", "CONTENT_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+    const [totalUsers, eligibleUsers, pendingBlogs, todaysPayments] = await Promise.all([
+      User.countDocuments(),
+      User.countDocuments({ isEligible: true }),
+      BlogService.getPendingBlogsCount(),
+      Payment.aggregate([
+        {
+          $match: {
+            createdAt: {
+              $gte: new Date(today + 'T00:00:00.000Z'),
+              $lt: new Date(today + 'T23:59:59.999Z')
+            },
+            status: 'SUCCESS'
+          }
+        },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ])
+    ]);
+
+    res.json({
+      totalUsers,
+      eligibleUsers,
+      pendingBlogs,
+      todaysPayments: todaysPayments[0]?.total || 0
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get all users
+router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const users = await User.find({}, '-password').sort({ createdAt: -1 });
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get pending blogs for approval
+router.get("/blogs/pending", roleRequired(["CONTENT_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const blogs = await BlogService.getPendingBlogs();
+    res.json(blogs);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Approve blog
+router.post("/blogs/:blogId/approve", roleRequired(["CONTENT_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const blog = await BlogService.approveBlog(req.params.blogId);
+    await logAdminAction(req.user._id, 'BLOG_APPROVED', 'BLOG', req.params.blogId, { title: blog.title }, req);
+    res.json({ message: 'Blog approved successfully', blog });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Reject blog
+router.post("/blogs/:blogId/reject", roleRequired(["CONTENT_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const blog = await BlogService.rejectBlog(req.params.blogId);
+    await logAdminAction(req.user._id, 'BLOG_REJECTED', 'BLOG', req.params.blogId, { title: blog.title }, req);
+    res.json({ message: 'Blog rejected successfully', blog });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Get all payments (SUPER_ADMIN)
+router.get("/payments", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const { page = 1, limit = 50, status, quizDate } = req.query;
+    const query = {};
+    
+    if (status) query.status = status;
+    if (quizDate) query.quizDate = quizDate;
+    
+    const payments = await Payment.find(query)
+      .populate('user', 'name phone email')
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+    
+    const total = await Payment.countDocuments(query);
+    
+    res.json({
+      payments,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get today's payments
+router.get("/payments/today", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const payments = await Payment.find({
+      quizDate: today
+    }).populate('user', 'name phone email').sort({ createdAt: -1 });
+    
+    res.json({ payments });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Advanced Analytics (QUIZ_ADMIN or SUPER_ADMIN)
+router.get("/analytics/overview", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const { period = '30d' } = req.query;
+    const days = parseInt(period.replace('d', '')) || 30;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    // User statistics
+    const totalUsers = await User.countDocuments();
+    const activeUsers = await User.countDocuments({ lastLoginAt: { $gte: startDate } });
+    const newUsers = await User.countDocuments({ createdAt: { $gte: startDate } });
+
+    // Payment statistics
+    const totalPayments = await Payment.countDocuments({ status: 'SUCCESS' });
+    const periodPayments = await Payment.countDocuments({
+      status: 'SUCCESS',
+      createdAt: { $gte: startDate }
+    });
+    const totalRevenue = await Payment.aggregate([
+      { $match: { status: 'SUCCESS' } },
+      { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]);
+
+    // Quiz statistics
+    const totalQuizzes = await Quiz.countDocuments();
+    const completedQuizzes = await Quiz.countDocuments({ status: 'FINALIZED' });
+    const totalWinners = await Winner.countDocuments();
+
+    res.json({
+      users: {
+        total: totalUsers,
+        active: activeUsers,
+        new: newUsers
+      },
+      payments: {
+        total: totalPayments,
+        period: periodPayments,
+        revenue: totalRevenue[0]?.total || 0
+      },
+      quizzes: {
+        total: totalQuizzes,
+        completed: completedQuizzes,
+        winners: totalWinners
+      },
+      period: `${days} days`
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get("/analytics/revenue", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const { period = '30d' } = req.query;
+    const days = parseInt(period.replace('d', '')) || 30;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const revenueData = await Payment.aggregate([
+      {
+        $match: {
+          status: 'SUCCESS',
+          createdAt: { $gte: startDate }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: '%Y-%m-%d', date: '$createdAt' }
+          },
+          revenue: { $sum: '$amount' },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { '_id': 1 } }
+    ]);
+
+    res.json(revenueData);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get("/analytics/user-engagement", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const { period = '30d' } = req.query;
+    const days = parseInt(period.replace('d', '')) || 30;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    // Daily active users
+    const dailyActive = await User.aggregate([
+      { $match: { lastLoginAt: { $gte: startDate } } },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: '%Y-%m-%d', date: '$lastLoginAt' }
+          },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { '_id': 1 } }
+    ]);
+
+    // Quiz participation
+    const quizParticipation = await QuizAttempt.aggregate([
+      { $match: { createdAt: { $gte: startDate } } },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: '%Y-%m-%d', date: '$createdAt' }
+          },
+          participants: { $sum: 1 }
+        }
+      },
+      { $sort: { '_id': 1 } }
+    ]);
+
+    res.json({
+      dailyActive,
+      quizParticipation
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// User feedback collection (no auth required for submission)
+router.post("/feedback", async (req, res) => {
+  try {
+    const feedback = req.body;
+
+    // Store feedback in database (you can create a Feedback model)
+    // For now, we'll log it and return success
+    console.log('User Feedback Received:', {
+      timestamp: new Date(),
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      ...feedback
+    });
+
+    // TODO: Create Feedback model and store in database
+    // const feedbackDoc = new Feedback(feedback);
+    // await feedbackDoc.save();
+
+    res.json({
+      message: 'Feedback received successfully',
+      feedbackId: Date.now() // Temporary ID
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+export default router;
