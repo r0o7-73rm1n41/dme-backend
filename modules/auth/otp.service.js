@@ -26,9 +26,8 @@ export async function generateOtp(key, purpose, contact) {
 
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-  await redis.setEx(
+  await redis.set(
     key,
-    Math.floor(OTP_TTL / 1000),
     JSON.stringify({
       contact,
       purpose,
@@ -36,11 +35,12 @@ export async function generateOtp(key, purpose, contact) {
       attempts: 0,
       expiresAt: Date.now() + OTP_TTL,
       consumed: false
-    })
+    }),
+    { ex: Math.floor(OTP_TTL / 1000) }
   );
 
   // Increment rate limit counter
-  await redis.setEx(rateKey, Math.floor(OTP_RATE_WINDOW / 1000), requestCount + 1);
+  await redis.set(rateKey, requestCount + 1, { ex: Math.floor(OTP_RATE_WINDOW / 1000) });
 
   return otp;
 }
@@ -75,7 +75,7 @@ export async function verifyOtp(key, otp, expectedPurpose) {
 
   if (parsed.hash !== hashOtp(otp)) {
     parsed.attempts += 1;
-    await redis.setEx(key, Math.floor(OTP_TTL / 1000), JSON.stringify(parsed));
+    await redis.set(key, JSON.stringify(parsed), { ex: Math.floor(OTP_TTL / 1000) });
     throw new Error("Invalid OTP");
   }
 

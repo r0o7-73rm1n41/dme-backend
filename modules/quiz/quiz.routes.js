@@ -298,7 +298,7 @@ router.get("/winners", quizListRateLimit, async (req, res) => {
     }));
     
     // Cache for 10 minutes
-    await redis.setEx(cacheKey, 600, JSON.stringify(result));
+    await redis.set(cacheKey, JSON.stringify(result), { ex: 600 });
     
     res.json(result);
   } catch (error) {

@@ -80,7 +80,7 @@ export function rateLimit(windowMs = DEFAULT_WINDOW_MS, maxRequests = DEFAULT_MA
       //   new Promise((_, reject) => setTimeout(() => reject(new Error('Redis timeout')), 500))
       // ]);
       await Promise.race([
-        redis.setEx(rateKey, Math.floor(windowMs / 1000), requestCount + 1),
+        redis.set(rateKey, requestCount + 1, { ex: Math.floor(windowMs / 1000) }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Redis timeout')), 500))
       ]);
 
