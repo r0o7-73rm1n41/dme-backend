@@ -31,30 +31,19 @@ import jwt from 'jsonwebtoken';
 import User from './modules/user/user.model.js';
 import ObservabilityService from './modules/monitoring/observability.service.js';
 
-// ---------------- CORS SETUP ----------------
-// Whitelisted origins
-const allowedOrigins = [
-  'https://dme-frontend.vercel.app', // production frontend
-  'http://localhost:3000',           // local dev frontend
-  'http://localhost:5173'            // Vite default
-];
-
-app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true
-}));
-
 // ---------------------------------------------
 
 // Socket connection tracking for rate limiting
 const socketConnections = new Map(); // IP -> Set of socket IDs
 const MAX_SOCKETS_PER_IP = 5;
+
+// Allowed origins for Socket.IO
+const allowedOrigins = [
+  'https://dme-frontend.vercel.app',
+  'https://www.dailymindeducation.com',
+  'http://localhost:3000',
+  'http://localhost:5173'
+];
 
 const PORT = process.env.PORT || 5000;
 
@@ -79,9 +68,13 @@ async function startServer() {
     // Setup Socket.IO with auth middleware
     const io = new Server(server, {
       cors: {
-        origin: process.env.NODE_ENV === 'production'
-          ? process.env.FRONTEND_URL || false
-          : "http://localhost:3000",
+        origin: function(origin, callback) {
+          if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+          } else {
+            callback(new Error('Not allowed by CORS'));
+          }
+        },
         methods: ["GET", "POST"],
         credentials: true
       },

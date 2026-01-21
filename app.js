@@ -34,6 +34,8 @@ app.use(cors({
       'http://localhost:3001',
       'http://127.0.0.1:3000',
       'http://127.0.0.1:3001',
+      'https://dme-frontend.vercel.app', // Vercel deployment
+      'https://www.dailymindeducation.com', // Production domain
       process.env.FRONTEND_URL
     ].filter(Boolean);
     
