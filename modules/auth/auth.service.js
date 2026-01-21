@@ -92,7 +92,7 @@ export async function requestRegisterOtp({ phone, email }) {
   return otp; // For development/testing - remove in production
 }
 
-export async function registerUser({ phone, email, otp, password }) {
+export async function registerUser({ phone, email, otp, password, name }) {
   // For development/testing - skip OTP verification
   if (process.env.NODE_ENV === 'development' && !otp) {
     // Skip OTP verification in development
@@ -115,6 +115,7 @@ export async function registerUser({ phone, email, otp, password }) {
   const otpMode = phone ? "SMS" : "EMAIL";
 
   const user = await User.create({
+    name,
     phone,
     email,
     passwordHash,
