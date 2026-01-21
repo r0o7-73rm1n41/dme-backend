@@ -92,7 +92,7 @@ export async function requestRegisterOtp({ phone, email }) {
   return otp; // For development/testing - remove in production
 }
 
-export async function registerUser({ phone, email, otp, password, name }) {
+export async function registerUser({ phone, email, otp, password, name, age, gender, schoolName, classGrade }) {
   // For development/testing - skip OTP verification
   if (process.env.NODE_ENV === 'development' && !otp) {
     // Skip OTP verification in development
@@ -122,7 +122,12 @@ export async function registerUser({ phone, email, otp, password, name }) {
     phoneVerified: !!phone,
     isPhoneVerified: !!phone,
     emailVerified: !!email,
-    otpMode // Lock OTP mode after first verification
+    otpMode, // Lock OTP mode after first verification
+    age,
+    gender,
+    schoolName,
+    classGrade,
+    profileCompleted: true // Mark profile as completed since all required fields are provided
   });
 
   const tokens = signTokens(user);
