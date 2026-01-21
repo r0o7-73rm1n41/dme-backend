@@ -45,11 +45,16 @@ export const handleError = (err, res) => {
     error = new AppError(message, 401);
   }
 
-  res.status(error.statusCode || 500).json({
-    status: error.status,
-    message: error.message || 'Something went wrong!',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
+  try {
+    res.status(error.statusCode || 500).json({
+      status: error.status,
+      message: typeof error.message === 'string' ? error.message : 'An error occurred',
+      ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    });
+  } catch (jsonError) {
+    // If JSON serialization fails, send plain text
+    res.status(error.statusCode || 500).set('Content-Type', 'text/plain').send('An error occurred');
+  }
 };
 
 export const asyncHandler = (fn) => (req, res, next) => {

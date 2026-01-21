@@ -7,7 +7,7 @@ export async function sendRegisterOtp(req, res) {
     const otp = await AuthService.requestRegisterOtp(req.body);
     res.json({ success: true }); // Do not send OTP in response for security
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    res.status(400).json({ message: typeof error.message === 'string' ? error.message : 'An error occurred' });
   }
 }
 
@@ -26,7 +26,7 @@ export async function register(req, res) {
       refreshToken: tokens.refreshToken
     });
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    res.status(400).json({ message: typeof error.message === 'string' ? error.message : 'An error occurred' });
   }
 }
 
@@ -49,7 +49,7 @@ export async function login(req, res) {
       refreshToken: tokens.refreshToken
     });
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    res.status(400).json({ message: typeof error.message === 'string' ? error.message : 'An error occurred' });
   }
 }
 
