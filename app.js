@@ -57,6 +57,9 @@ const allowedOrigins = [
   'http://localhost:3001',
   'https://dme-frontend.vercel.app',
   'https://www.dailymindeducation.com',
+  'https://dme-frontend-kc8r25r6q-hnnns-projects.vercel.app',
+  'https://dme-frontend-4li6hd0p9-hnnns-projects.vercel.app',
+  'https://dme-frontend-jcvk4k5xv-hnnns-projects.vercel.app',
   process.env.FRONTEND_URL
 ].filter(Boolean);
 
@@ -67,6 +70,11 @@ app.use(cors({
 
     // allow if in allowed list
     if (allowedOrigins.some(o => o === origin)) {
+      return callback(null, true);
+    }
+
+    // allow all Vercel domains (*.vercel.app)
+    if (origin && origin.endsWith('.vercel.app')) {
       return callback(null, true);
     }
 
