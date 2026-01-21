@@ -41,12 +41,14 @@ async function startServer() {
     // Connect to MongoDB
     await connectDB();
 
-    // Connect to Redis
+    // Initialize Redis (Upstash does not require .connect())
     try {
-      await redisClient.connect();
-      console.log('Redis connected');
+      if (typeof redisClient.connect === 'function') {
+        await redisClient.connect();
+      }
+      console.log('Redis ready');
     } catch (redisError) {
-      console.warn('Redis connection failed, continuing without Redis:', redisError.message);
+      console.warn('Redis unavailable, continuing without Redis:', redisError.message);
     }
 
     // Create HTTP server
