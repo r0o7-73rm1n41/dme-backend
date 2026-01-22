@@ -26,7 +26,15 @@ export async function register(req, res) {
       refreshToken: tokens.refreshToken
     });
   } catch (error) {
-    res.status(400).json({ message: typeof error.message === 'string' ? error.message : 'An error occurred' });
+    console.error('Registration error:', error);
+    // Handle Mongoose validation errors
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({ message: messages.join(', ') });
+    }
+    // Handle other errors
+    const message = typeof error.message === 'string' ? error.message : 'An error occurred during registration';
+    res.status(400).json({ message });
   }
 }
 
