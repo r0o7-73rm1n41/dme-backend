@@ -53,8 +53,13 @@ export async function verifyOtp(key, otp, expectedPurpose) {
   console.log('Retrieved OTP data for key:', key, 'Data:', data);
   if (!data) throw new Error("OTP expired or invalid");
 
-  // Data is already parsed by Upstash client
-  const parsed = data;
+  // Handle both parsed and string data
+  let parsed;
+  if (typeof data === 'string') {
+    parsed = JSON.parse(data);
+  } else {
+    parsed = data;
+  }
 
   // Check purpose
   if (parsed.purpose !== expectedPurpose) {
@@ -78,7 +83,7 @@ export async function verifyOtp(key, otp, expectedPurpose) {
     throw new Error("OTP attempts exceeded");
   }
 
-  if (parsed.hash !== hashOtp(otp)) {
+  if (parsed.hash !== hashOtp(otp.trim())) {
     parsed.attempts += 1;
     await redis.set(key, JSON.stringify(parsed), { ex: Math.floor(OTP_TTL / 1000) });
     throw new Error("Invalid OTP");
