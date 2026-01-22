@@ -26,16 +26,20 @@ export async function generateOtp(key, purpose, contact) {
 
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
+  const otpData = {
+    contact,
+    purpose,
+    hash: hashOtp(otp),
+    attempts: 0,
+    expiresAt: Date.now() + OTP_TTL,
+    consumed: false
+  };
+  const otpDataString = JSON.stringify(otpData);
+  console.log('Storing OTP data for key:', key, 'Data:', otpDataString);
+
   await redis.set(
     key,
-    JSON.stringify({
-      contact,
-      purpose,
-      hash: hashOtp(otp),
-      attempts: 0,
-      expiresAt: Date.now() + OTP_TTL,
-      consumed: false
-    }),
+    otpDataString,
     { ex: Math.floor(OTP_TTL / 1000) }
   );
 
@@ -47,6 +51,7 @@ export async function generateOtp(key, purpose, contact) {
 
 export async function verifyOtp(key, otp, expectedPurpose) {
   const data = await redis.get(key);
+  console.log('Retrieved OTP data for key:', key, 'Data:', data);
   if (!data) throw new Error("OTP expired or invalid");
 
   let parsed;
