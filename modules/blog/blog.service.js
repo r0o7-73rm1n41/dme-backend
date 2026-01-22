@@ -289,3 +289,33 @@ export async function rejectBlog(blogId) {
   await blog.save();
   return blog;
 }
+
+export async function getPendingBlogs(limit = 20, skip = 0) {
+  return await Blog.find({ status: 'PENDING' })
+    .populate('author', 'name username fullName')
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .skip(skip);
+}
+
+export async function getPendingBlogsCount() {
+  return await Blog.countDocuments({ status: 'PENDING' });
+}
+
+export async function updateBlogStatus(blogId, status) {
+  const blog = await Blog.findById(blogId);
+  if (!blog) throw new Error("Blog not found");
+
+  const validStatuses = ['PENDING', 'APPROVED', 'REJECTED', 'DELETED'];
+  if (!validStatuses.includes(status)) {
+    throw new Error("Invalid status");
+  }
+
+  blog.status = status;
+  await blog.save();
+
+  // Log admin action
+  await logAdminAction('UPDATE_BLOG_STATUS', { blogId, oldStatus: blog.status, newStatus: status });
+
+  return blog;
+}
