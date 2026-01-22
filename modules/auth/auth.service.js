@@ -191,7 +191,13 @@ export async function loginUser({ phone, password }) {
     throw new Error("Please enter a valid 10-digit phone number");
   }
 
-  const user = await User.findOne({ phone });
+  // Normalize phone number (same as registration)
+  let normalizedPhone = phone.replace(/[\+\s-]/g, '');
+  if (normalizedPhone.length === 10 && /^\d{10}$/.test(normalizedPhone)) {
+    normalizedPhone = '91' + normalizedPhone;
+  }
+
+  const user = await User.findOne({ phone: normalizedPhone });
   if (!user) throw new Error("Invalid credentials");
 
   if (!user.isPhoneVerified) throw new Error("Phone number not verified. Please verify your phone number first.");
@@ -222,8 +228,14 @@ export async function adminLogin({ phone, password }) {
     throw new Error("Please enter a valid 10-digit phone number");
   }
 
+  // Normalize phone number (same as registration)
+  let normalizedPhone = phone.replace(/[\+\s-]/g, '');
+  if (normalizedPhone.length === 10 && /^\d{10}$/.test(normalizedPhone)) {
+    normalizedPhone = '91' + normalizedPhone;
+  }
+
   const user = await User.findOne({ 
-    phone, 
+    phone: normalizedPhone, 
     role: { $in: ["ADMIN", "SUPER_ADMIN", "QUIZ_ADMIN", "CONTENT_ADMIN"] }
   });
   if (!user) throw new Error("Invalid admin credentials");
@@ -245,7 +257,13 @@ export async function adminLogin({ phone, password }) {
 export async function requestPasswordReset(phone) {
   if (!phone) throw new Error("Phone required");
 
-  const user = await User.findOne({ phone });
+  // Normalize phone number (same as registration)
+  let normalizedPhone = phone.replace(/[\+\s-]/g, '');
+  if (normalizedPhone.length === 10 && /^\d{10}$/.test(normalizedPhone)) {
+    normalizedPhone = '91' + normalizedPhone;
+  }
+
+  const user = await User.findOne({ phone: normalizedPhone });
   if (!user) throw new Error("User not found");
 
   // Enforce OTP mode: password reset must use the user's registered OTP mode
@@ -255,7 +273,7 @@ export async function requestPasswordReset(phone) {
 
   let key, otp;
   if (user.otpMode === "SMS") {
-    key = `otp:reset:phone:${phone}`;
+    key = `otp:reset:phone:${normalizedPhone}`;
     otp = await generateOtp(key, 'reset', phone);
 
     try {
@@ -288,13 +306,19 @@ export async function requestPasswordReset(phone) {
 export async function resetPassword({ phone, otp, newPassword }) {
   if (!phone) throw new Error("Phone required");
 
-  const user = await User.findOne({ phone });
+  // Normalize phone number (same as registration)
+  let normalizedPhone = phone.replace(/[\+\s-]/g, '');
+  if (normalizedPhone.length === 10 && /^\d{10}$/.test(normalizedPhone)) {
+    normalizedPhone = '91' + normalizedPhone;
+  }
+
+  const user = await User.findOne({ phone: normalizedPhone });
   if (!user) throw new Error("User not found");
 
   // Verify OTP using the user's registered OTP mode
   let key;
   if (user.otpMode === "SMS") {
-    key = `otp:reset:phone:${phone}`;
+    key = `otp:reset:phone:${normalizedPhone}`;
   } else if (user.otpMode === "EMAIL") {
     key = `otp:reset:email:${user.email}`;
   } else {
