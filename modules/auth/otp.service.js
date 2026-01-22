@@ -49,7 +49,13 @@ export async function verifyOtp(key, otp, expectedPurpose) {
   const data = await redis.get(key);
   if (!data) throw new Error("OTP expired or invalid");
 
-  const parsed = JSON.parse(data);
+  let parsed;
+  try {
+    parsed = JSON.parse(data);
+  } catch (parseError) {
+    console.error('OTP data parse error:', parseError, 'Data:', data);
+    throw new Error("OTP data corrupted");
+  }
 
   // Check purpose
   if (parsed.purpose !== expectedPurpose) {
