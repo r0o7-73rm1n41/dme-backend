@@ -34,12 +34,11 @@ export async function generateOtp(key, purpose, contact) {
     expiresAt: Date.now() + OTP_TTL,
     consumed: false
   };
-  const otpDataString = JSON.stringify(otpData);
-  console.log('Storing OTP data for key:', key, 'Data:', otpDataString);
+  console.log('Storing OTP data for key:', key, 'Data:', otpData);
 
   await redis.set(
     key,
-    otpDataString,
+    otpData,
     { ex: Math.floor(OTP_TTL / 1000) }
   );
 
@@ -54,14 +53,8 @@ export async function verifyOtp(key, otp, expectedPurpose) {
   console.log('Retrieved OTP data for key:', key, 'Data:', data);
   if (!data) throw new Error("OTP expired or invalid");
 
-  let parsed;
-  try {
-    parsed = JSON.parse(data);
-  } catch (parseError) {
-    console.error('OTP data parse error:', parseError, 'Data:', data);
-    await redis.del(key);
-    throw new Error("OTP data corrupted");
-  }
+  // Data is already parsed by Upstash client
+  const parsed = data;
 
   // Check purpose
   if (parsed.purpose !== expectedPurpose) {
