@@ -150,7 +150,7 @@ export async function registerUser({ phone, email, otp, password, name, age, gen
     existing.isPhoneVerified = !!phone;
     existing.emailVerified = !!email;
     existing.otpMode = otpMode;
-    existing.profileCompleted = true;
+    existing.profileCompleted = false;
     await existing.save();
     const tokens = signTokens(existing);
     return { user: existing, tokens };
@@ -171,7 +171,7 @@ export async function registerUser({ phone, email, otp, password, name, age, gen
     gender,
     schoolName,
     class: classValue,
-    profileCompleted: true // Mark profile as completed since all required fields are provided
+    profileCompleted: false // Will be set to true after profile completion
   });
 
   const tokens = signTokens(user);
@@ -365,6 +365,19 @@ export async function updateProfile(userId, updates) {
   // Update name if fullName is provided
   if (updates.fullName && !updates.name) {
     user.name = updates.fullName;
+  }
+
+  // Check if profile is now complete
+  const requiredFields = ['fullName', 'username', 'age', 'gender', 'schoolName', 'class'];
+  const isProfileComplete = requiredFields.every(field => {
+    if (field === 'class') {
+      return user.class !== null && user.class !== undefined;
+    }
+    return user[field] !== null && user[field] !== undefined && user[field] !== '';
+  });
+
+  if (isProfileComplete && !user.profileCompleted) {
+    user.profileCompleted = true;
   }
 
   await user.save();

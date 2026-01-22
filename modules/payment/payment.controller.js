@@ -104,10 +104,16 @@ export async function quizStatus(req, res) {
     // Check if user has ever paid (for PDF access)
     const hasPaidEver = await PaymentService.hasUserPaidEver(req.user._id);
 
+    // Check if there's a quiz available for user's class
+    const QuizService = (await import('../quiz/quiz.service.js')).default || (await import('../quiz/quiz.service.js'));
+    const quiz = await QuizService.getTodayQuiz(today, req.user._id);
+    const quizAvailable = !!quiz;
+
     res.json({ 
       eligible,
       hasPaidToday: !!payment,
       hasPaidEver,
+      quizAvailable,
       message: eligible 
         ? "You are eligible to participate in today's quiz" 
         : "Payment required to participate"

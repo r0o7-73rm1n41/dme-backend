@@ -706,11 +706,14 @@ export async function getTodayQuiz(date, userId = null) {
     // If user provided, check class grade matching
     if (quiz && userId && quiz.classGrade && quiz.classGrade !== 'ALL') {
       const User = (await import('../user/user.model.js')).default;
-      const user = await User.findById(userId).select('classGrade');
-      if (user && user.classGrade && user.classGrade !== quiz.classGrade) {
-        // Don't return null - return quiz but frontend will handle class mismatch
-        // This allows showing appropriate error message
-        return quiz;
+      const user = await User.findById(userId).select('class');
+      if (user && user.class) {
+        // Map user's class to quiz classGrade format
+        const userClassGrade = user.class === '10' ? '10th' : user.class === '12' ? '12th' : 'Other';
+        if (userClassGrade !== quiz.classGrade) {
+          // User is not eligible for this quiz class
+          return null;
+        }
       }
     }
     
@@ -1147,6 +1150,10 @@ export async function submitAnswer(userId, questionId, selectedOptionIndex) {
     throw new Error('No attempt found');
   }
 
+  // Check if user has paid for today
+  const PaymentService = (await import('../payment/payment.service.js')).default;
+  const hasPaid = await PaymentService.isUserEligible(userId, today);
+
   // Find the question by _id
   const question = quiz.questions.find(q => q._id.toString() === questionId);
   if (!question) {
@@ -1183,25 +1190,28 @@ export async function submitAnswer(userId, questionId, selectedOptionIndex) {
   
   const isCorrect = originalSelectedIndex === question.correctIndex;
 
-  await QuizProgress.findOneAndUpdate(
-    { user: userId, quizDate: today },
-    {
-      $push: {
-        questions: {
-          questionId,
-          sentAt: new Date(Date.now() - 15000), // Approximate
-          answeredAt,
-          isCorrect
+  // Only save progress if user has paid
+  if (hasPaid) {
+    await QuizProgress.findOneAndUpdate(
+      { user: userId, quizDate: today },
+      {
+        $push: {
+          questions: {
+            questionId,
+            sentAt: new Date(Date.now() - 15000), // Approximate
+            answeredAt,
+            isCorrect
+          }
         }
-      }
-    },
-    { upsert: true }
-  );
+      },
+      { upsert: true }
+    );
 
-  // Update attempt with shuffled answer index
-  attempt.answers[questionIndex] = selectedOptionIndex;
-  attempt.answerTimestamps[questionIndex] = answeredAt;
-  await attempt.save();
+    // Update attempt with shuffled answer index
+    attempt.answers[questionIndex] = selectedOptionIndex;
+    attempt.answerTimestamps[questionIndex] = answeredAt;
+    await attempt.save();
+  }
 
-  return { success: true, isCorrect };
+  return { success: true, isCorrect, countsForScore: hasPaid };
 }

@@ -139,6 +139,7 @@ router.post("/quiz", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, re
       quizDate: today,
       questions: req.body.questions,
       state: 'SCHEDULED',
+      classGrade: req.body.classGrade || 'ALL',
     });
 
     await logAdminAction(req.user._id, 'QUIZ_CREATED', 'QUIZ', quiz.quizDate, { questionsCount: quiz.questions.length }, req);
