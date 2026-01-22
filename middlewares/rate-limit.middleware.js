@@ -114,7 +114,7 @@ async function checkRedisHealth() {
  */
 
 // AUTH ENDPOINTS - Strict limits to prevent brute force
-export const authRateLimit = rateLimit(15 * 60 * 1000, 5, 'auth'); // 5 attempts per 15 minutes per IP
+export const authRateLimit = rateLimit(60 * 1000, 10, 'auth'); // 10 attempts per minute per IP
 
 // READ ENDPOINTS - Lenient for user experience
 export const readRateLimit = rateLimit(60 * 1000, 300, 'read'); // 300 requests per minute
