@@ -5,10 +5,21 @@ import { Redis } from '@upstash/redis';
 let redisClient;
 
 if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-  redisClient = new Redis({
+  const upstashClient = new Redis({
     url: process.env.UPSTASH_REDIS_REST_URL,
     token: process.env.UPSTASH_REDIS_REST_TOKEN,
   });
+
+  // Wrap Upstash client to add setEx method
+  redisClient = {
+    set: (key, value, options) => upstashClient.set(key, value, options),
+    get: (key) => upstashClient.get(key),
+    del: (key) => upstashClient.del(key),
+    setEx: (key, ttl, value) => upstashClient.set(key, value, { ex: ttl }),
+    setex: (key, ttl, value) => upstashClient.set(key, value, { ex: ttl }),
+    ping: () => upstashClient.ping(),
+  };
+
   console.log('Connected to Upstash Redis via REST');
 } else {
   // Mock Redis for local dev / testing
@@ -20,6 +31,7 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
     set: (key, value) => { store.set(key, value); return Promise.resolve('OK'); },
     get: (key) => Promise.resolve(store.get(key) || null),
     setEx: (key, ttl, value) => { store.set(key, value); return Promise.resolve('OK'); },
+    setex: (key, ttl, value) => { store.set(key, value); return Promise.resolve('OK'); },
     del: (key) => { store.delete(key); return Promise.resolve(1); },
     ping: () => Promise.resolve('PONG'),
   };
