@@ -30,11 +30,11 @@ export async function register(req, res) {
     // Handle Mongoose validation errors
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map(err => err.message);
-      return res.status(400).json({ message: messages.join(', ') });
+      return res.status(400).send(messages.join(', '));
     }
     // Handle other errors
-    const message = typeof error.message === 'string' ? error.message : 'An error occurred during registration';
-    res.status(400).json({ message });
+    const message = typeof error.message === 'string' ? error.message : JSON.stringify(error.message) || 'An error occurred during registration';
+    res.status(400).send(message);
   }
 }
 
