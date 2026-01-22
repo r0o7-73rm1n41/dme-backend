@@ -125,16 +125,6 @@ export async function registerUser({ phone, email, otp, password, name, age, gen
   // Determine OTP mode and set it immutably
   const otpMode = phone ? "SMS" : "EMAIL";
 
-  // Map classGrade to class field
-  let classValue = null;
-  if (classGrade === '10th') {
-    classValue = '10';
-  } else if (classGrade === '12th') {
-    classValue = '12';
-  } else if (classGrade === 'Other') {
-    classValue = 'Other';
-  }
-
   const existing = await User.findOne({
     $or: [{ phone: normalizedPhone }, { email }]
   });
@@ -142,15 +132,11 @@ export async function registerUser({ phone, email, otp, password, name, age, gen
     // Update existing user with new registration data
     existing.name = name;
     existing.passwordHash = await bcrypt.hash(password, 12);
-    existing.age = age;
-    existing.gender = gender;
-    existing.schoolName = schoolName;
-    existing.class = classValue;
     existing.phoneVerified = !!phone;
     existing.isPhoneVerified = !!phone;
     existing.emailVerified = !!email;
     existing.otpMode = otpMode;
-    existing.profileCompleted = true;
+    existing.profileCompleted = false; // Reset to allow profile completion
     await existing.save();
     const tokens = signTokens(existing);
     return { user: existing, tokens };
@@ -167,11 +153,7 @@ export async function registerUser({ phone, email, otp, password, name, age, gen
     isPhoneVerified: !!phone,
     emailVerified: !!email,
     otpMode, // Lock OTP mode after first verification
-    age,
-    gender,
-    schoolName,
-    class: classValue,
-    profileCompleted: true // Mark profile as completed since all required fields are provided
+    profileCompleted: false // Profile not completed yet
   });
 
   const tokens = signTokens(user);
@@ -365,6 +347,11 @@ export async function updateProfile(userId, updates) {
   // Update name if fullName is provided
   if (updates.fullName && !updates.name) {
     user.name = updates.fullName;
+  }
+
+  // Check if profile is completed (all required fields filled)
+  if (user.age && user.gender && user.schoolName && user.class) {
+    user.profileCompleted = true;
   }
 
   await user.save();
