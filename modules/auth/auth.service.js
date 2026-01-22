@@ -122,13 +122,6 @@ export async function registerUser({ phone, email, otp, password, name, age, gen
     await verifyOtp(key, otp, 'register');
   }
 
-  const existing = await User.findOne({
-    $or: [{ phone: normalizedPhone }, { email }]
-  });
-  if (existing) throw new Error("User already exists");
-
-  const passwordHash = await bcrypt.hash(password, 12);
-
   // Determine OTP mode and set it immutably
   const otpMode = phone ? "SMS" : "EMAIL";
 
@@ -141,6 +134,29 @@ export async function registerUser({ phone, email, otp, password, name, age, gen
   } else if (classGrade === 'Other') {
     classValue = null; // or maybe store 'Other' if the model allows it
   }
+
+  const existing = await User.findOne({
+    $or: [{ phone: normalizedPhone }, { email }]
+  });
+  if (existing) {
+    // Update existing user with new registration data
+    existing.name = name;
+    existing.passwordHash = await bcrypt.hash(password, 12);
+    existing.age = age;
+    existing.gender = gender;
+    existing.schoolName = schoolName;
+    existing.class = classValue;
+    existing.phoneVerified = !!phone;
+    existing.isPhoneVerified = !!phone;
+    existing.emailVerified = !!email;
+    existing.otpMode = otpMode;
+    existing.profileCompleted = true;
+    await existing.save();
+    const tokens = signTokens(existing);
+    return { user: existing, tokens };
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
 
   const user = await User.create({
     name,
