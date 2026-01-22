@@ -14,7 +14,7 @@ export async function sendSMS(phone, otp) {
   // Remove any + or spaces, and ensure it's in international format
   let formattedPhone = phone.replace(/[\+\s-]/g, '');
   // If it's an Indian number without country code, add 91
-  if (formattedPhone.length === 10 && formattedPhone.startsWith('8')) {
+  if (formattedPhone.length === 10 && /^\d{10}$/.test(formattedPhone)) {
     formattedPhone = '91' + formattedPhone;
   }
 
