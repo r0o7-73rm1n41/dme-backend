@@ -20,7 +20,12 @@ export async function register(req, res) {
         name: user.name,
         phone: user.phone,
         email: user.email,
-        role: user.role
+        role: user.role,
+        age: user.age,
+        gender: user.gender,
+        schoolName: user.schoolName,
+        classGrade: user.class === '10' ? '10th' : user.class === '12' ? '12th' : 'Other',
+        profileCompleted: user.profileCompleted
       },
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken
@@ -102,7 +107,12 @@ export async function getCurrentUser(req, res) {
         role: user.role,
         profileImage: user.profileImage,
         isVerified: user.phoneVerified || user.emailVerified,
-        createdAt: user.createdAt
+        createdAt: user.createdAt,
+        age: user.age,
+        gender: user.gender,
+        schoolName: user.schoolName,
+        classGrade: user.class === '10' ? '10th' : user.class === '12' ? '12th' : 'Other',
+        profileCompleted: user.profileCompleted
       }
     });
   } catch (error) {
