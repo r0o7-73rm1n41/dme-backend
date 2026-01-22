@@ -54,6 +54,7 @@ export async function verifyOtp(key, otp, expectedPurpose) {
     parsed = JSON.parse(data);
   } catch (parseError) {
     console.error('OTP data parse error:', parseError, 'Data:', data);
+    await redis.del(key);
     throw new Error("OTP data corrupted");
   }
 
