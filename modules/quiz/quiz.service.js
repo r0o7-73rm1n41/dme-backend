@@ -1183,28 +1183,25 @@ export async function submitAnswer(userId, questionId, selectedOptionIndex) {
   
   const isCorrect = originalSelectedIndex === question.correctIndex;
 
-  // Only save progress and answers if user is eligible (paid)
-  if (isEligible) {
-    await QuizProgress.findOneAndUpdate(
-      { user: userId, quizDate: today },
-      {
-        $push: {
-          questions: {
-            questionId,
-            sentAt: new Date(Date.now() - 15000), // Approximate
-            answeredAt,
-            isCorrect
-          }
+  await QuizProgress.findOneAndUpdate(
+    { user: userId, quizDate: today },
+    {
+      $push: {
+        questions: {
+          questionId,
+          sentAt: new Date(Date.now() - 15000), // Approximate
+          answeredAt,
+          isCorrect
         }
-      },
-      { upsert: true }
-    );
+      }
+    },
+    { upsert: true }
+  );
 
-    // Update attempt with shuffled answer index
-    attempt.answers[questionIndex] = selectedOptionIndex;
-    attempt.answerTimestamps[questionIndex] = answeredAt;
-    await attempt.save();
-  }
+  // Update attempt with shuffled answer index
+  attempt.answers[questionIndex] = selectedOptionIndex;
+  attempt.answerTimestamps[questionIndex] = answeredAt;
+  await attempt.save();
 
-  return { success: true, isCorrect: isEligible ? isCorrect : null, eligible: isEligible };
+  return { success: true, isCorrect };
 }

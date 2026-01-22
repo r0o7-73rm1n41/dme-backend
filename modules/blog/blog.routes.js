@@ -249,48 +249,4 @@ router.delete("/:blogId", authRequired, async (req, res) => {
   }
 });
 
-// Admin routes for blog management
-router.get("/admin/pending", authRequired, roleRequired(['ADMIN']), blogListRateLimit, async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
-    const skip = (page - 1) * limit;
-
-    const blogs = await BlogService.getPendingBlogs(limit, skip);
-    const totalBlogs = await BlogService.getPendingBlogsCount();
-    const totalPages = Math.ceil(totalBlogs / limit);
-
-    res.json({
-      blogs,
-      pagination: {
-        currentPage: page,
-        totalPages,
-        totalBlogs,
-        hasNext: page < totalPages,
-        hasPrev: page > 1
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-router.put("/admin/:blogId/approve", authRequired, roleRequired(['ADMIN']), async (req, res) => {
-  try {
-    const result = await BlogService.updateBlogStatus(req.params.blogId, 'APPROVED');
-    res.json(result);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-});
-
-router.put("/admin/:blogId/reject", authRequired, roleRequired(['ADMIN']), async (req, res) => {
-  try {
-    const result = await BlogService.updateBlogStatus(req.params.blogId, 'REJECTED');
-    res.json(result);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-});
-
 export default router;
