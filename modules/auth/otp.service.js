@@ -4,8 +4,8 @@ import redis from "../../config/redis.js";
 
 const OTP_TTL = Number(process.env.OTP_TTL_MS || 180000);
 const MAX_ATTEMPTS = 5; // Changed from 3 to 5
-const OTP_RATE_LIMIT = 5; // Max OTP requests per 15 min per user (increased from 3)
-const OTP_RATE_WINDOW = 900000; // 15 min in ms (increased from 10 min)
+const OTP_RATE_LIMIT = 10; // Max OTP requests per 5 min per user (increased from 5)
+const OTP_RATE_WINDOW = 300000; // 5 min in ms (decreased from 15 min)
 
 function hashOtp(otp) {
   return crypto
