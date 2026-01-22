@@ -203,7 +203,7 @@ export async function updateProfile(req, res) {
         age: updatedUser.age,
         gender: updatedUser.gender,
         schoolName: updatedUser.schoolName,
-        classGrade: updatedUser.classGrade,
+        classGrade: updatedUser.class === '10' ? '10th' : updatedUser.class === '12' ? '12th' : 'Other',
         role: updatedUser.role,
         profileImage: updatedUser.profileImage
       }

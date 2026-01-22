@@ -114,6 +114,16 @@ export async function registerUser({ phone, email, otp, password, name, age, gen
   // Determine OTP mode and set it immutably
   const otpMode = phone ? "SMS" : "EMAIL";
 
+  // Map classGrade to class field
+  let classValue = null;
+  if (classGrade === '10th') {
+    classValue = '10';
+  } else if (classGrade === '12th') {
+    classValue = '12';
+  } else if (classGrade === 'Other') {
+    classValue = null; // or maybe store 'Other' if the model allows it
+  }
+
   const user = await User.create({
     name,
     phone,
@@ -126,7 +136,7 @@ export async function registerUser({ phone, email, otp, password, name, age, gen
     age,
     gender,
     schoolName,
-    classGrade,
+    class: classValue,
     profileCompleted: true // Mark profile as completed since all required fields are provided
   });
 
@@ -300,7 +310,20 @@ export async function updateProfile(userId, updates) {
         }
       } else {
         // Field can be updated (either not immutable or not yet set)
-        user[field] = updates[field];
+        if (field === 'classGrade') {
+          // Map classGrade to class field
+          let classValue = null;
+          if (updates.classGrade === '10th') {
+            classValue = '10';
+          } else if (updates.classGrade === '12th') {
+            classValue = '12';
+          } else if (updates.classGrade === 'Other') {
+            classValue = null;
+          }
+          user.class = classValue;
+        } else {
+          user[field] = updates[field];
+        }
       }
     }
   });
