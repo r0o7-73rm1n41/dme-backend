@@ -132,7 +132,7 @@ export async function registerUser({ phone, email, otp, password, name, age, gen
   } else if (classGrade === '12th') {
     classValue = '12';
   } else if (classGrade === 'Other') {
-    classValue = null; // or maybe store 'Other' if the model allows it
+    classValue = 'Other';
   }
 
   const existing = await User.findOne({
