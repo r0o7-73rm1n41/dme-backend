@@ -162,7 +162,6 @@ const userSchema = new mongoose.Schema(
 
     class: {
       type: String,
-      enum: ['10', '12', 'Other'],
       index: true
     },
 
