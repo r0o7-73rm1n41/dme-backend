@@ -46,10 +46,19 @@ export async function requestRegisterOtp({ phone, email }) {
   if (!!phone === !!email)
     throw new Error("Provide either phone or email");
 
+  // Normalize phone number
+  let normalizedPhone = phone;
+  if (phone) {
+    normalizedPhone = phone.replace(/[\+\s-]/g, '');
+    if (normalizedPhone.length === 10 && /^\d{10}$/.test(normalizedPhone)) {
+      normalizedPhone = '91' + normalizedPhone;
+    }
+  }
+
   // Check if user already exists and enforce their OTP mode
   let existingUser = null;
-  if (phone) {
-    existingUser = await User.findOne({ phone });
+  if (normalizedPhone) {
+    existingUser = await User.findOne({ phone: normalizedPhone });
   } else if (email) {
     existingUser = await User.findOne({ email });
   }
@@ -65,8 +74,8 @@ export async function requestRegisterOtp({ phone, email }) {
     }
   }
 
-  const key = phone
-    ? `otp:register:phone:${phone}`
+  const key = normalizedPhone
+    ? `otp:register:phone:${normalizedPhone}`
     : `otp:register:email:${email}`;
 
   const otp = await generateOtp(key, 'register', phone || email);
@@ -93,19 +102,28 @@ export async function requestRegisterOtp({ phone, email }) {
 }
 
 export async function registerUser({ phone, email, otp, password, name, age, gender, schoolName, classGrade }) {
+  // Normalize phone number
+  let normalizedPhone = phone;
+  if (phone) {
+    normalizedPhone = phone.replace(/[\+\s-]/g, '');
+    if (normalizedPhone.length === 10 && /^\d{10}$/.test(normalizedPhone)) {
+      normalizedPhone = '91' + normalizedPhone;
+    }
+  }
+
   // For development/testing - skip OTP verification
   if (process.env.NODE_ENV === 'development' && !otp) {
     // Skip OTP verification in development
   } else {
-    const key = phone
-      ? `otp:register:phone:${phone}`
+    const key = normalizedPhone
+      ? `otp:register:phone:${normalizedPhone}`
       : `otp:register:email:${email}`;
 
     await verifyOtp(key, otp, 'register');
   }
 
   const existing = await User.findOne({
-    $or: [{ phone }, { email }]
+    $or: [{ phone: normalizedPhone }, { email }]
   });
   if (existing) throw new Error("User already exists");
 
@@ -126,7 +144,7 @@ export async function registerUser({ phone, email, otp, password, name, age, gen
 
   const user = await User.create({
     name,
-    phone,
+    phone: normalizedPhone,
     email,
     passwordHash,
     phoneVerified: !!phone,
