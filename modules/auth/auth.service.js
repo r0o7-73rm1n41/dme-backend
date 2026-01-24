@@ -83,9 +83,6 @@ export async function requestRegisterOtp({ phone, email, mode = 'SMS' }) {
   return { success: true, mode };
 }
 
-  return otp; // For development/testing - remove in production
-}
-
 export async function registerUser({ phone, email, otp, password, name, age, gender, schoolName, classGrade }) {
   // Normalize phone number
   let normalizedPhone = phone;
