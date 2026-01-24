@@ -10,13 +10,16 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
     token: process.env.UPSTASH_REDIS_REST_TOKEN,
   });
 
-  // Wrap Upstash client to add setEx method
+  // Wrap Upstash client to add missing methods
   redisClient = {
     set: (key, value, options) => upstashClient.set(key, value, options),
     get: (key) => upstashClient.get(key),
     del: (key) => upstashClient.del(key),
     setEx: (key, ttl, value) => upstashClient.set(key, value, { ex: ttl }),
     setex: (key, ttl, value) => upstashClient.set(key, value, { ex: ttl }),
+    expire: (key, ttl) => upstashClient.expire(key, ttl),
+    hincrby: (key, field, increment) => upstashClient.hincrby(key, field, increment),
+    hgetall: (key) => upstashClient.hgetall(key),
     ping: () => upstashClient.ping(),
   };
 
@@ -32,6 +35,23 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
     get: (key) => Promise.resolve(store.get(key) || null),
     setEx: (key, ttl, value) => { store.set(key, value); return Promise.resolve('OK'); },
     setex: (key, ttl, value) => { store.set(key, value); return Promise.resolve('OK'); },
+    expire: (key, ttl) => Promise.resolve(1),
+    hincrby: (key, field, increment) => {
+      const hashKey = `${key}:${field}`;
+      const current = parseInt(store.get(hashKey) || '0');
+      store.set(hashKey, (current + increment).toString());
+      return Promise.resolve(current + increment);
+    },
+    hgetall: (key) => {
+      const result = {};
+      for (const [storeKey, value] of store.entries()) {
+        if (storeKey.startsWith(`${key}:`)) {
+          const field = storeKey.split(':')[1];
+          result[field] = value;
+        }
+      }
+      return Promise.resolve(result);
+    },
     del: (key) => { store.delete(key); return Promise.resolve(1); },
     ping: () => Promise.resolve('PONG'),
   };
