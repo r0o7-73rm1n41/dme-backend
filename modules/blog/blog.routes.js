@@ -5,6 +5,7 @@ import * as BlogService from "./blog.service.js";
 import { authRequired, roleRequired, eligibilityRequired } from "../../middlewares/auth.middleware.js";
 import { blogListRateLimit, blogViewRateLimit, fileUploadRateLimit } from "../../middlewares/rate-limit.middleware.js";
 import cloudinary from "../../config/cloudinary.js";
+import { validate, blogSchemas } from "../../utils/validation.js";
 
 const router = express.Router();
 
@@ -22,7 +23,7 @@ const upload = multer({
 });
 
 // Create blog
-router.post("/", authRequired, fileUploadRateLimit, upload.single("pdf"), async (req, res) => {
+router.post("/", authRequired, fileUploadRateLimit, upload.single("pdf"), validate(blogSchemas.createBlog), async (req, res) => {
   try {
     let pdfUrl = null;
 

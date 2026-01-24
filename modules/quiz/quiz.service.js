@@ -82,9 +82,9 @@ export async function recoverQuizAdvancement() {
           await setCurrentQuestionIndex(today, nextIndex);
           await setQuestionStartTime(today, Date.now());
           console.log(`Quiz ${today}: Advanced to question index: ${nextIndex}`);
-          // Emit to all clients
+          // Emit to quiz room clients
           if (global.io) {
-            global.io.emit('question-advanced', { 
+            global.io.to(`quiz-${today}`).emit('question-advanced', { 
               quizDate: today, 
               currentQuestionIndex: nextIndex,
               timestamp: new Date().toISOString()
@@ -127,7 +127,7 @@ function shuffleArray(array, seed) {
   return shuffled;
 }
 
-export async function createQuizAttempt(userId, quizDate) {
+export async function createQuizAttempt(userId, quizDate, deviceInfo = {}) {
   try {
     // Check if user already has an attempt
     const existingAttempt = await QuizAttempt.findOne({ user: userId, quizDate });
@@ -165,7 +165,10 @@ export async function createQuizAttempt(userId, quizDate) {
       isEligible: false, // Will be set properly during finalization
       counted: false, // Will be set during finalization
       answersSaved: false,
-      questionOrder: shuffledIndices // Store the shuffled order
+      questionOrder: shuffledIndices, // Store the shuffled order
+      deviceId: deviceInfo.deviceId,
+      deviceFingerprint: deviceInfo.deviceFingerprint,
+      ipAddress: deviceInfo.ipAddress
     });
 
     // Set current question index to global current
@@ -1049,9 +1052,9 @@ export async function startQuiz(quizDate) {
         const nextIndex = current + 1;
         await setCurrentQuestionIndex(quizDate, nextIndex);
         await setQuestionStartTime(quizDate, Date.now());
-        // Emit to clients
+        // Emit to quiz room clients
         if (global.io) {
-          global.io.emit('question-advanced', { 
+          global.io.to(`quiz-${quizDate}`).emit('question-advanced', { 
             quizDate, 
             currentQuestionIndex: nextIndex,
             timestamp: new Date().toISOString()
@@ -1138,7 +1141,7 @@ export async function getCurrentQuestion(userId) {
   };
 }
 
-export async function submitAnswer(userId, questionId, selectedOptionIndex) {
+export async function submitAnswer(userId, questionId, selectedOptionIndex, deviceInfo = {}) {
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   const quiz = await Quiz.findOne({ quizDate: today }).populate('questions');
   if (!quiz || quiz.state !== 'LIVE') {
@@ -1148,6 +1151,28 @@ export async function submitAnswer(userId, questionId, selectedOptionIndex) {
   const attempt = await QuizAttempt.findOne({ user: userId, quizDate: today });
   if (!attempt) {
     throw new Error('No attempt found');
+  }
+
+  // Anti-cheat: Validate device consistency
+  if (attempt.deviceId && deviceInfo.deviceId && attempt.deviceId !== deviceInfo.deviceId) {
+    // Record anti-cheat event
+    const ObservabilityService = (await import('../monitoring/observability.service.js')).default;
+    await ObservabilityService.recordAntiCheatEvent(userId, today, 'device_mismatch', {
+      expectedDeviceId: attempt.deviceId,
+      providedDeviceId: deviceInfo.deviceId,
+      ipAddress: deviceInfo.ipAddress
+    });
+    throw new Error('Device mismatch detected - possible cheating attempt');
+  }
+  if (attempt.deviceFingerprint && deviceInfo.deviceFingerprint && attempt.deviceFingerprint !== deviceInfo.deviceFingerprint) {
+    // Record anti-cheat event
+    const ObservabilityService = (await import('../monitoring/observability.service.js')).default;
+    await ObservabilityService.recordAntiCheatEvent(userId, today, 'device_fingerprint_mismatch', {
+      expectedFingerprint: attempt.deviceFingerprint,
+      providedFingerprint: deviceInfo.deviceFingerprint,
+      ipAddress: deviceInfo.ipAddress
+    });
+    throw new Error('Device fingerprint mismatch detected - possible cheating attempt');
   }
 
   // Check if user has paid for today
@@ -1176,6 +1201,22 @@ export async function submitAnswer(userId, questionId, selectedOptionIndex) {
   const progress = await QuizProgress.findOne({ user: userId, quizDate: today, 'questions.questionId': questionId });
   if (progress && progress.questions.find(q => q.questionId.toString() === questionId)?.answeredAt) {
     return { success: true, alreadyAnswered: true };
+  }
+
+  // Anti-cheat: Check timing - prevent answering too quickly (less than 2 seconds)
+  const questionProgress = progress?.questions.find(q => q.questionId.toString() === questionId);
+  if (questionProgress) {
+    const timeSinceSent = Date.now() - new Date(questionProgress.sentAt).getTime();
+    if (timeSinceSent < 2000) { // Less than 2 seconds
+      // Record anti-cheat event
+      const ObservabilityService = (await import('../monitoring/observability.service.js')).default;
+      await ObservabilityService.recordAntiCheatEvent(userId, today, 'rapid_answer', {
+        timeSinceSent,
+        questionId,
+        deviceInfo
+      });
+      throw new Error('Answer submitted too quickly - possible automated cheating');
+    }
   }
 
   // Record answer

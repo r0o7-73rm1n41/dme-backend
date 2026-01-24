@@ -42,7 +42,7 @@ export async function refreshAccessToken(refreshToken) {
 
 /* ---------------- REGISTER ---------------- */
 
-export async function requestRegisterOtp({ phone, email }) {
+export async function requestRegisterOtp({ phone, email, mode = 'SMS' }) {
   if (!!phone === !!email)
     throw new Error("Provide either phone or email");
 
@@ -67,8 +67,7 @@ export async function requestRegisterOtp({ phone, email }) {
     // If user exists but doesn't have otpMode set (legacy user), allow either
     if (existingUser.otpMode) {
       // Enforce existing OTP mode
-      const requestedMode = phone ? "SMS" : "EMAIL";
-      if (existingUser.otpMode !== requestedMode) {
+      if (existingUser.otpMode !== mode) {
         throw new Error(`OTP must be sent via ${existingUser.otpMode.toLowerCase()}`);
       }
     }
@@ -78,25 +77,11 @@ export async function requestRegisterOtp({ phone, email }) {
     ? `otp:register:phone:${normalizedPhone}`
     : `otp:register:email:${email}`;
 
-  const otp = await generateOtp(key, 'register', phone || email);
+  const contact = normalizedPhone || email;
+  const otp = await generateOtp(key, 'REGISTER', contact, mode);
 
-  // Send OTP via appropriate channel
-  if (phone) {
-    try {
-      await sendOTP(phone, otp);
-    } catch (error) {
-      console.error('Failed to send OTP SMS:', error);
-      // Don't throw error here - OTP is still valid and stored
-      // User can request again if SMS fails
-    }
-  } else if (email) {
-    try {
-      await sendEmailOTP(email, otp);
-    } catch (error) {
-      console.error('Failed to send OTP email:', error);
-      // Don't throw error here - OTP is still valid and stored
-    }
-  }
+  return { success: true, mode };
+}
 
   return otp; // For development/testing - remove in production
 }

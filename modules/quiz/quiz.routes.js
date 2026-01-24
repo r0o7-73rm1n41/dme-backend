@@ -3,8 +3,9 @@ import express from "express";
 import * as QuizService from "./quiz.service.js";
 import Winner from "./winner.model.js";
 import { authRequired, eligibilityRequired } from "../../middlewares/auth.middleware.js";
-import { quizAttemptRateLimit, quizListRateLimit } from "../../middlewares/rate-limit.middleware.js";
+import { quizAttemptRateLimit, quizAnswerRateLimit, quizListRateLimit } from "../../middlewares/rate-limit.middleware.js";
 import redis from "../../config/redis.js";
+import { validate, quizSchemas } from "../../utils/validation.js";
 
 const router = express.Router();
 
@@ -164,7 +165,7 @@ router.post("/enter", authRequired, quizAttemptRateLimit, async (req, res) => {
 });
 
 // Get quiz status (for countdown, etc.)
-router.get("/status/:quizDate", authRequired, async (req, res) => {
+router.get("/status/:quizDate", authRequired, quizListRateLimit, async (req, res) => {
   try {
     const status = await QuizService.getQuizStatus(req.params.quizDate, req.user._id);
     res.json(status);
@@ -174,9 +175,15 @@ router.get("/status/:quizDate", authRequired, async (req, res) => {
 });
 
 // Join quiz (create attempt)
-router.post("/join/:quizDate", authRequired, quizAttemptRateLimit, async (req, res) => {
+router.post("/join/:quizDate", authRequired, quizAttemptRateLimit, validate(quizSchemas.joinQuiz), async (req, res) => {
   try {
-    const attempt = await QuizService.createQuizAttempt(req.user._id, req.params.quizDate);
+    const deviceInfo = {
+      deviceId: req.body.deviceId,
+      deviceFingerprint: req.body.deviceFingerprint,
+      ipAddress: req.ip || req.connection.remoteAddress
+    };
+
+    const attempt = await QuizService.createQuizAttempt(req.user._id, req.params.quizDate, deviceInfo);
     res.json(attempt);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -184,13 +191,20 @@ router.post("/join/:quizDate", authRequired, quizAttemptRateLimit, async (req, r
 });
 
 // Submit answer - api call rate limiting - ALLOW unpaid users to submit (but answers won't count)
-router.post("/answer/:quizDate", authRequired, quizAttemptRateLimit, async (req, res) => {
+router.post("/answer/:quizDate", authRequired, quizAnswerRateLimit, validate(quizSchemas.submitAnswer), async (req, res) => {
   try {
-    const { questionIndex, selectedOptionIndex, timeTakenMs, questionHash } = req.body;
+    const { questionId, selectedOptionIndex, timeSpentMs, deviceId, deviceFingerprint } = req.body;
+    
+    // Extract device info for validation
+    const deviceInfo = {
+      deviceId,
+      deviceFingerprint,
+      ipAddress: req.ip || req.connection.remoteAddress
+    };
     
     // Allow answer submission even for unpaid users
     // The scoring will mark them as not eligible in finalizeQuizAttempt
-    const result = await QuizService.submitAnswer(req.user._id, req.params.quizDate, questionIndex, selectedOptionIndex, timeTakenMs, questionHash);
+    const result = await QuizService.submitAnswer(req.user._id, questionId, selectedOptionIndex, deviceInfo);
     
     // Check if user is eligible - return this info to frontend
     const { isUserEligible } = await import('../payment/payment.service.js');
@@ -448,7 +462,7 @@ router.post("/join", authRequired, enforceEligibility, quizAttemptRateLimit, asy
 });
 
 // GET /quiz/status
-router.get("/status", async (req, res) => {
+router.get("/status", quizListRateLimit, async (req, res) => {
   try {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     const quiz = await QuizService.getTodayQuiz(today);

@@ -1,6 +1,8 @@
 // modules/auth/otp.service.js
 import crypto from "crypto";
 import redis from "../../config/redis.js";
+import { sendSMS } from "../../utils/sms.js";
+import { sendEmailOTP } from "../../utils/email.js";
 
 const OTP_TTL = Number(process.env.OTP_TTL_MS || 300000);
 const MAX_ATTEMPTS = 10; // Changed from 3 to 5
@@ -14,7 +16,7 @@ function hashOtp(otp) {
     .digest("hex");
 }
 
-export async function generateOtp(key, purpose, contact) {
+export async function generateOtp(key, purpose, contact, mode = 'SMS') {
   // Rate limiting: check OTP request frequency
   const rateKey = `otp_rate_${key}`;
   const currentRequests = await redis.get(rateKey);
@@ -29,6 +31,7 @@ export async function generateOtp(key, purpose, contact) {
   const otpData = {
     contact,
     purpose,
+    mode,
     hash: hashOtp(otp),
     attempts: 0,
     expiresAt: Date.now() + OTP_TTL,
@@ -44,6 +47,18 @@ export async function generateOtp(key, purpose, contact) {
 
   // Increment rate limit counter
   await redis.set(rateKey, requestCount + 1, { ex: Math.floor(OTP_RATE_WINDOW / 1000) });
+
+  // Send OTP via appropriate channel
+  try {
+    if (mode === 'EMAIL') {
+      await sendEmailOTP(contact, otp);
+    } else {
+      await sendSMS(contact, otp);
+    }
+  } catch (error) {
+    console.error(`Failed to send ${mode} OTP:`, error);
+    throw new Error(`Failed to send OTP via ${mode}`);
+  }
 
   return otp;
 }

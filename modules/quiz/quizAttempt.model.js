@@ -96,8 +96,20 @@ const quizAttemptSchema = new mongoose.Schema(
       max: 50
     },
 
-    startedAt: {
-      type: Date,
+    deviceId: {
+      type: String,
+      index: true
+    },
+
+    deviceFingerprint: {
+      type: String, // Hash of device characteristics
+      index: true
+    },
+
+    ipAddress: {
+      type: String,
+      index: true
+    },
       default: () => new Date()
     },
 

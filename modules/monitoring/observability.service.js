@@ -102,19 +102,59 @@ class ObservabilityService {
     return data ? JSON.parse(data) : null;
   }
 
-  // Redis Fencing Failures
-  async recordRedisFencingFailure(quizDate, operation) {
-    const key = `redis:fencing:failures`;
-    await redisClient.hincrby(key, `${quizDate}:${operation}`, 1);
-    await redisClient.expire(key, 86400 * 7);
+  // Anti-cheat Monitoring
+  async recordAntiCheatEvent(userId, quizDate, eventType, details = {}) {
+    const key = `anticheat:events:${quizDate}`;
+    const event = {
+      timestamp: new Date(),
+      userId,
+      eventType, // 'device_mismatch', 'rapid_answer', 'suspicious_timing', etc.
+      details
+    };
 
-    logger.error('Redis fencing failure detected', { quizDate, operation });
-    // In production, this would trigger critical alerts
+    await redisClient.lpush(key, JSON.stringify(event));
+    await redisClient.expire(key, 86400 * 30); // Keep for 30 days
+
+    // Also track per user
+    const userKey = `anticheat:user:${userId}`;
+    await redisClient.lpush(userKey, JSON.stringify(event));
+    await redisClient.ltrim(userKey, 0, 49); // Keep last 50 events per user
+    await redisClient.expire(userKey, 86400 * 30);
+
+    logger.warn('Anti-cheat event recorded', { userId, quizDate, eventType, details });
   }
 
-  async getRedisFencingFailures() {
-    const key = `redis:fencing:failures`;
-    return await redisClient.hgetall(key);
+  async getAntiCheatEvents(quizDate, limit = 100) {
+    const key = `anticheat:events:${quizDate}`;
+    const events = await redisClient.lrange(key, 0, limit - 1);
+    return events.map(event => JSON.parse(event));
+  }
+
+  async getUserAntiCheatEvents(userId) {
+    const key = `anticheat:user:${userId}`;
+    const events = await redisClient.lrange(key, 0, -1);
+    return events.map(event => JSON.parse(event)).reverse();
+  }
+
+  // Suspicious Activity Detection
+  async detectSuspiciousActivity(userId, quizDate) {
+    const events = await this.getUserAntiCheatEvents(userId);
+    const recentEvents = events.filter(e => 
+      new Date(e.timestamp) > new Date(Date.now() - 24 * 60 * 60 * 1000) // Last 24 hours
+    );
+
+    const suspiciousPatterns = {
+      multipleDeviceMismatches: recentEvents.filter(e => e.eventType === 'device_mismatch').length > 2,
+      rapidAnswering: recentEvents.filter(e => e.eventType === 'rapid_answer').length > 5,
+      timingAnomalies: recentEvents.filter(e => e.eventType === 'suspicious_timing').length > 3
+    };
+
+    if (Object.values(suspiciousPatterns).some(Boolean)) {
+      logger.alert('Suspicious activity pattern detected', { userId, quizDate, patterns: suspiciousPatterns });
+      return { isSuspicious: true, patterns: suspiciousPatterns };
+    }
+
+    return { isSuspicious: false };
   }
 
   // Comprehensive Health Check

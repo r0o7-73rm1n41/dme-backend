@@ -916,4 +916,78 @@ router.post("/feedback", async (req, res) => {
   }
 });
 
+// Anti-cheat monitoring (SUPER_ADMIN only)
+router.get("/anticheat/events/:quizDate?", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const ObservabilityService = (await import('../monitoring/observability.service.js')).default;
+    const quizDate = req.params.quizDate || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    
+    const events = await ObservabilityService.getAntiCheatEvents(quizDate);
+    
+    res.json({
+      quizDate,
+      events,
+      totalEvents: events.length
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get("/anticheat/user/:userId", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const ObservabilityService = (await import('../monitoring/observability.service.js')).default;
+    const userId = req.params.userId;
+    
+    const events = await ObservabilityService.getUserAntiCheatEvents(userId);
+    const suspiciousCheck = await ObservabilityService.detectSuspiciousActivity(userId);
+    
+    // Get user details
+    const user = await User.findById(userId).select('name phone email username');
+    
+    res.json({
+      user,
+      events,
+      suspiciousActivity: suspiciousCheck
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get("/anticheat/suspicious-users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const ObservabilityService = (await import('../monitoring/observability.service.js')).default;
+    
+    // Get all users who have anti-cheat events in the last 24 hours
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    
+    // This is a simplified approach - in production you'd want more sophisticated detection
+    const suspiciousUsers = [];
+    
+    // Get recent quiz attempts and check each user
+    const recentAttempts = await QuizAttempt.find({
+      createdAt: { $gte: yesterday }
+    }).select('user').distinct('user');
+    
+    for (const userId of recentAttempts) {
+      const check = await ObservabilityService.detectSuspiciousActivity(userId);
+      if (check.isSuspicious) {
+        const user = await User.findById(userId).select('name phone email username');
+        suspiciousUsers.push({
+          user,
+          patterns: check.patterns
+        });
+      }
+    }
+    
+    res.json({
+      suspiciousUsers,
+      totalSuspicious: suspiciousUsers.length
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 export default router;

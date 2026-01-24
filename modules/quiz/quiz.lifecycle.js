@@ -64,9 +64,15 @@ export async function transitionQuiz(quizDate, toState) {
     transitionedAt: quiz[timestampField]
   });
 
-  // Emit socket event for quiz state changes
-  if (global.io && toState === QUIZ_STATES.LIVE) {
-    global.io.emit('quiz-live', { quizDate, liveAt: quiz.liveAt });
+  // Emit socket event for all quiz state changes
+  if (global.io) {
+    global.io.to(`quiz-${quizDate}`).emit('quiz-state-changed', { 
+      quizDate, 
+      fromState, 
+      toState, 
+      timestamp: new Date().toISOString(),
+      transitionedAt: quiz[timestampField]
+    });
   }
 
   return quiz;

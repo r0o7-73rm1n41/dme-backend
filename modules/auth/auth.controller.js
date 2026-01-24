@@ -1,6 +1,7 @@
 // modules/auth/auth.controller.js
 import * as AuthService from "./auth.service.js";
 import cloudinary from "../../config/cloudinary.js";
+import { validate, authSchemas } from "../../utils/validation.js";
 
 export async function sendRegisterOtp(req, res) {
   try {
