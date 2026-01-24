@@ -71,7 +71,7 @@ router.post('/unblock', authRequired, reportRateLimit, async (req, res) => {
 });
 
 // Admin routes
-router.get('/admin/pending', authRequired, roleRequired('ADMIN'), async (req, res) => {
+router.get('/admin/pending', authRequired, roleRequired(['SUPER_ADMIN']), async (req, res) => {
   try {
     const reports = await ReportService.getUserReports(null, 'pending');
     res.json(reports);
@@ -80,7 +80,7 @@ router.get('/admin/pending', authRequired, roleRequired('ADMIN'), async (req, re
   }
 });
 
-router.put('/admin/:reportId', authRequired, roleRequired('ADMIN'), async (req, res) => {
+router.put('/admin/:reportId', authRequired, roleRequired(['SUPER_ADMIN']), async (req, res) => {
   try {
     const { status } = req.body;
     const report = await ReportService.updateReportStatus(req.params.reportId, status, req.user._id);
