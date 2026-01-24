@@ -210,11 +210,8 @@ export async function adminLogin({ phone, password }) {
     throw new Error("Please enter a valid 10-digit phone number");
   }
 
-  // Normalize phone number (same as registration)
-  let normalizedPhone = phone.replace(/[\+\s-]/g, '');
-  if (normalizedPhone.length === 10 && /^\d{10}$/.test(normalizedPhone)) {
-    normalizedPhone = '91' + normalizedPhone;
-  }
+  // For admin login, don't normalize phone number (admins may have different formats)
+  const normalizedPhone = phone.replace(/\D/g, '');
 
   const user = await User.findOne({ 
     phone: normalizedPhone, 
