@@ -110,8 +110,6 @@ const quizAttemptSchema = new mongoose.Schema(
       type: String,
       index: true
     },
-      default: () => new Date()
-    },
 
     completedAt: {
       type: Date
