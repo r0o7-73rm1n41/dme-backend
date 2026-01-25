@@ -17,6 +17,7 @@ const adminAuditSchema = new mongoose.Schema(
       enum: [
         "QUIZ_CREATED",
         "QUIZ_CREATED_CSV",
+        "QUIZ_UPDATED",
         "QUIZ_LOCKED",
         "QUIZ_STARTED",
         "QUIZ_ENDED",
