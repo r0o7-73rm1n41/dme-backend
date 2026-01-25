@@ -136,7 +136,7 @@ jobs:
         run: |
           pip install google-auth requests
           echo "$SERVICE_ACCOUNT_JSON" > service_account.json
-          python3 -c "
+          python3 -c '
           import json
           import google.auth.transport.requests
           from google.oauth2 import service_account
@@ -178,7 +178,7 @@ jobs:
           print("Sending upload request...")
           response = requests.post(
             'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
-            headers={'Authorization': f'Bearer {access_token}'},
+            headers={'Authorization': "Bearer " + access_token},
             files=files_payload
           )
           print('Response status: ' + str(response.status_code))
@@ -189,4 +189,4 @@ jobs:
             print('Upload failed: ' + str(response.status_code))
             print('Response:', response.text)
             exit(1)
-          "
+          '
