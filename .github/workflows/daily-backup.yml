@@ -1,0 +1,133 @@
+name: Daily Full MERN Backup
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Every day at 2 AM UTC
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    env:
+      MONGODB_URI: ${{ secrets.MONGODB_URI }}
+      REDIS_URL: ${{ secrets.REDIS_URL }}
+      CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+      CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+      CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+      BACKEND_ENV: ${{ secrets.BACKEND_ENV }}
+      GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+
+    steps:
+      - name: Checkout Backend Repo
+        uses: actions/checkout@v4
+        with:
+          path: backend
+
+      - name: Checkout Frontend Repo
+        uses: actions/checkout@v4
+        with:
+          repository: r0o7-73rm1n41/dme-frontend
+          path: frontend
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip wget curl mongodb-clients redis-tools nodejs npm
+
+      - name: Create Backup Directory
+        run: mkdir backup
+
+      # --- MongoDB Backup ---
+      - name: MongoDB Dump
+        run: |
+          TIMESTAMP=$(date +'%F_%H-%M')
+          mongodump --uri="$MONGODB_URI" --archive=backup/mongodb_$TIMESTAMP.gz --gzip
+
+      # --- Redis Backup (Upstash) ---
+      - name: Redis Backup
+        run: |
+          TIMESTAMP=$(date +'%F_%H-%M')
+          redis-cli -u $REDIS_URL --rdb backup/redis_$TIMESTAMP.rdb || echo "Redis backup failed - Upstash may not support direct RDB dumps"
+
+      # --- Cloudinary Backup ---
+      - name: Cloudinary Backup
+        run: |
+          TIMESTAMP=$(date +'%F_%H-%M')
+          npm install -g cloudinary
+          mkdir -p backup/cloudinary
+          node -e "
+            const cloudinary = require('cloudinary').v2;
+            const fs = require('fs');
+            const https = require('https');
+            const path = require('path');
+
+            cloudinary.config({
+              cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+              api_key: process.env.CLOUDINARY_API_KEY,
+              api_secret: process.env.CLOUDINARY_API_SECRET
+            });
+
+            async function downloadFile(url, filePath) {
+              return new Promise((resolve, reject) => {
+                const file = fs.createWriteStream(filePath);
+                https.get(url, (res) => {
+                  res.pipe(file);
+                  file.on('finish', () => {
+                    file.close();
+                    resolve();
+                  });
+                }).on('error', (err) => {
+                  fs.unlink(filePath, () => reject(err));
+                });
+              });
+            }
+
+            async function backupCloudinary() {
+              try {
+                const result = await new Promise((resolve, reject) => {
+                  cloudinary.api.resources({ type: 'upload', max_results: 500 }, (err, result) => {
+                    if (err) reject(err);
+                    else resolve(result);
+                  });
+                });
+
+                const downloadPromises = result.resources.map(async (r) => {
+                  const url = r.secure_url;
+                  const fileName = path.join('backup/cloudinary', r.public_id.replace(/\//g, '_') + '.' + r.format);
+                  await downloadFile(url, fileName);
+                });
+
+                await Promise.all(downloadPromises);
+                console.log('Cloudinary backup completed');
+              } catch (err) {
+                console.error('Cloudinary backup failed:', err);
+                process.exit(1);
+              }
+            }
+
+            backupCloudinary();
+          "
+
+      # --- Save .env ---
+      - name: Save .env
+        run: echo "$BACKEND_ENV" > backup/.env
+
+      # --- Copy Code to Backup ---
+      - name: Copy Code to Backup
+        run: |
+          cp -r backend backup/
+          cp -r frontend backup/
+
+      # --- Zip All Backups ---
+      - name: Create ZIP
+        run: |
+          TIMESTAMP=$(date +'%F_%H-%M')
+          zip -r full_backup_$TIMESTAMP.zip backup
+
+      # --- Upload to Google Drive ---
+      - name: Upload to Google Drive
+        uses: drive-actions/upload@v1
+        with:
+          folder_id: ${{ secrets.GDRIVE_FOLDER_ID }}
+          file: full_backup_*.zip
+          service_account_json: ${{ secrets.SERVICE_ACCOUNT_JSON }}
