@@ -152,8 +152,8 @@ router.post("/questions/bulk", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), asyn
     // Create questions in bulk
     const createdQuestions = await Question.insertMany(questions);
 
-    // Return the IDs
-    const questionIds = createdQuestions.map(q => q._id);
+    // Return the IDs as strings
+    const questionIds = createdQuestions.map(q => q._id.toString());
 
     // Note: Admin audit logging for questions creation is skipped for now
     // await logAdminAction(req.user._id, 'QUESTIONS_CREATED', 'QUESTION', null, { count: questionIds.length }, req);
