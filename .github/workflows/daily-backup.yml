@@ -169,7 +169,7 @@ jobs:
           print('Uploading to folder: ' + folder_id)
           metadata = {
             'name': os.path.basename(file_path),
-            'parents': [folder_id]
+            "driveId": folder_id
           }
           files_payload = {
             'data': ('metadata', json.dumps(metadata), 'application/json; charset=UTF-8'),
@@ -177,7 +177,7 @@ jobs:
           }
           print("Sending upload request...")
           response = requests.post(
-            'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+            "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true",
             headers={'Authorization': "Bearer " + access_token},
             files=files_payload
           )
