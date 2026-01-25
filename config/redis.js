@@ -18,6 +18,7 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
     setEx: (key, ttl, value) => upstashClient.set(key, value, { ex: ttl }),
     setex: (key, ttl, value) => upstashClient.set(key, value, { ex: ttl }),
     expire: (key, ttl) => upstashClient.expire(key, ttl),
+    incr: (key) => upstashClient.incrby(key, 1),
     hincrby: (key, field, increment) => upstashClient.hincrby(key, field, increment),
     hgetall: (key) => upstashClient.hgetall(key),
     ping: () => upstashClient.ping(),
@@ -36,6 +37,12 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
     setEx: (key, ttl, value) => { store.set(key, value); return Promise.resolve('OK'); },
     setex: (key, ttl, value) => { store.set(key, value); return Promise.resolve('OK'); },
     expire: (key, ttl) => Promise.resolve(1),
+    incr: (key) => {
+      const current = parseInt(store.get(key) || '0');
+      const newValue = current + 1;
+      store.set(key, newValue.toString());
+      return Promise.resolve(newValue);
+    },
     hincrby: (key, field, increment) => {
       const hashKey = `${key}:${field}`;
       const current = parseInt(store.get(hashKey) || '0');
