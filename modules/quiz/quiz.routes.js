@@ -175,11 +175,17 @@ router.get("/status/:quizDate", authRequired, quizListRateLimit, async (req, res
 });
 
 // Join quiz (create attempt)
-router.post("/join/:quizDate", authRequired, quizAttemptRateLimit, validate(quizSchemas.joinQuiz), async (req, res) => {
+router.post("/join/:quizDate", authRequired, quizAttemptRateLimit, async (req, res) => {
   try {
+    // Validate quizDate format
+    const quizDatePattern = /^\d{4}-\d{2}-\d{2}$/;
+    if (!quizDatePattern.test(req.params.quizDate)) {
+      return res.status(400).json({ message: 'Invalid quiz date format. Expected YYYY-MM-DD' });
+    }
+
     const deviceInfo = {
-      deviceId: req.body.deviceId,
-      deviceFingerprint: req.body.deviceFingerprint,
+      deviceId: req.body?.deviceId,
+      deviceFingerprint: req.body?.deviceFingerprint,
       ipAddress: req.ip || req.connection.remoteAddress
     };
 

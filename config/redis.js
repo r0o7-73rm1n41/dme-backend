@@ -21,6 +21,8 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
     incr: (key) => upstashClient.incrby(key, 1),
     hincrby: (key, field, increment) => upstashClient.hincrby(key, field, increment),
     hgetall: (key) => upstashClient.hgetall(key),
+    lpush: (key, ...values) => upstashClient.lpush(key, values),
+    lrange: (key, start, end) => upstashClient.lrange(key, start, end),
     ping: () => upstashClient.ping(),
   };
 
@@ -57,6 +59,19 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
           result[field] = value;
         }
       }
+      return Promise.resolve(result);
+    },
+    lpush: (key, ...values) => {
+      const listKey = `list:${key}`;
+      let list = store.get(listKey) || [];
+      list.unshift(...values);
+      store.set(listKey, list);
+      return Promise.resolve(list.length);
+    },
+    lrange: (key, start, end) => {
+      const listKey = `list:${key}`;
+      const list = store.get(listKey) || [];
+      const result = list.slice(start, end === -1 ? undefined : end + 1);
       return Promise.resolve(result);
     },
     del: (key) => { store.delete(key); return Promise.resolve(1); },

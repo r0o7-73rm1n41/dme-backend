@@ -389,9 +389,10 @@ export const adminSchemas = {
 };
 
 // Middleware function to validate requests
-export const validate = (schema) => {
+export const validate = (schema, source = 'body') => {
   return (req, res, next) => {
-    const { error, value } = schema.validate(req.body, { abortEarly: false });
+    const data = source === 'params' ? req.params : source === 'query' ? req.query : req.body;
+    const { error, value } = schema.validate(data, { abortEarly: false });
 
     if (error) {
       const errors = error.details.map(detail => detail.message);
@@ -401,7 +402,9 @@ export const validate = (schema) => {
       });
     }
 
-    req.body = value; // Use validated/sanitized data
+    if (source === 'params') req.params = value;
+    else if (source === 'query') req.query = value;
+    else req.body = value; // Use validated/sanitized data
     next();
   };
 };
