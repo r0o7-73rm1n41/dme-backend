@@ -24,6 +24,12 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
     lpush: (key, ...values) => upstashClient.lpush(key, values),
     lrange: (key, start, end) => upstashClient.lrange(key, start, end),
     ping: () => upstashClient.ping(),
+    keys: (pattern) => {
+      // Upstash Redis doesn't support KEYS command via REST API
+      // Return empty array for health checks and monitoring
+      console.warn(`Redis KEYS command not supported by Upstash Redis. Pattern: ${pattern}`);
+      return Promise.resolve([]);
+    },
   };
 
   console.log('Connected to Upstash Redis via REST');
@@ -76,6 +82,14 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
     },
     del: (key) => { store.delete(key); return Promise.resolve(1); },
     ping: () => Promise.resolve('PONG'),
+    keys: (pattern) => {
+      const keys = Array.from(store.keys()).filter(key => {
+        // Simple pattern matching for * wildcard
+        const regex = new RegExp(pattern.replace(/\*/g, '.*'));
+        return regex.test(key);
+      });
+      return Promise.resolve(keys);
+    },
   };
 
   console.log('Using mock Redis');
