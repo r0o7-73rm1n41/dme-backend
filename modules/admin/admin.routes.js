@@ -882,6 +882,208 @@ router.get("/payments/today", roleRequired(["SUPER_ADMIN"]), async (req, res) =>
   }
 });
 
+// System health check for testing and monitoring
+router.get("/system/health", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const health = {
+      timestamp: new Date().toISOString(),
+      status: 'checking',
+      components: {},
+      metrics: {}
+    };
+
+    // Database health
+    try {
+      const dbStats = await mongoose.connection.db.stats();
+      health.components.database = {
+        status: 'healthy',
+        collections: dbStats.collections,
+        dataSize: dbStats.dataSize
+      };
+    } catch (error) {
+      health.components.database = { status: 'unhealthy', error: error.message };
+    }
+
+    // Redis health
+    try {
+      const redisClient = (await import('../../config/redis.js')).default;
+      await redisClient.ping();
+      health.components.redis = { status: 'healthy' };
+    } catch (error) {
+      health.components.redis = { status: 'unhealthy', error: error.message };
+    }
+
+    // Current quiz status
+    try {
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const quiz = await Quiz.findOne({ quizDate: today });
+      health.components.quiz = {
+        status: 'healthy',
+        currentQuiz: quiz ? {
+          date: quiz.quizDate,
+          state: quiz.state,
+          questions: quiz.questions.length
+        } : null
+      };
+    } catch (error) {
+      health.components.quiz = { status: 'unhealthy', error: error.message };
+    }
+
+    // Rate limiting status
+    try {
+      const redisClient = (await import('../../config/redis.js')).default;
+      const keys = await redisClient.keys('rate_limit:*');
+      health.metrics.rateLimitKeys = keys.length;
+      health.components.rateLimiting = { status: 'healthy', activeKeys: keys.length };
+    } catch (error) {
+      health.components.rateLimiting = { status: 'unhealthy', error: error.message };
+    }
+
+    // Overall status
+    const allHealthy = Object.values(health.components).every(comp => comp.status === 'healthy');
+    health.status = allHealthy ? 'healthy' : 'degraded';
+
+    res.json(health);
+  } catch (error) {
+    res.status(500).json({
+      timestamp: new Date().toISOString(),
+      status: 'error',
+      error: error.message
+    });
+  }
+});
+
+// Quiz performance monitoring for testing
+router.get("/system/quiz-performance", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const quiz = await Quiz.findOne({ quizDate: today });
+
+    if (!quiz) {
+      return res.json({
+        timestamp: new Date().toISOString(),
+        message: "No quiz found for today",
+        performance: null
+      });
+    }
+
+    // Get quiz attempts and performance metrics
+    const attempts = await QuizAttempt.find({ quizId: quiz._id });
+    const totalAttempts = attempts.length;
+    const completedAttempts = attempts.filter(a => a.completed).length;
+
+    // Calculate question-wise performance
+    const questionStats = quiz.questions.map((question, index) => {
+      const questionAttempts = attempts.filter(a => a.answers && a.answers[index]);
+      const correctAnswers = questionAttempts.filter(a => a.answers[index].selectedOption === question.correctOption).length;
+      const totalAnswers = questionAttempts.length;
+
+      return {
+        questionNumber: index + 1,
+        totalAnswers,
+        correctAnswers,
+        accuracy: totalAnswers > 0 ? (correctAnswers / totalAnswers * 100).toFixed(1) : 0
+      };
+    });
+
+    // Get active users count
+    const activeUsers = await User.countDocuments({
+      lastActive: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+    });
+
+    // Get payment metrics
+    const paidUsers = await User.countDocuments({ subscriptionStatus: 'active' });
+    const totalUsers = await User.countDocuments();
+
+    const performance = {
+      quizDate: quiz.quizDate,
+      quizState: quiz.state,
+      totalQuestions: quiz.questions.length,
+      currentQuestion: quiz.currentQuestionIndex + 1,
+      totalAttempts,
+      completedAttempts,
+      completionRate: totalAttempts > 0 ? (completedAttempts / totalAttempts * 100).toFixed(1) : 0,
+      questionStats,
+      userMetrics: {
+        totalUsers,
+        activeUsers,
+        paidUsers,
+        paidUserPercentage: totalUsers > 0 ? (paidUsers / totalUsers * 100).toFixed(1) : 0
+      },
+      timestamp: new Date().toISOString()
+    };
+
+    res.json(performance);
+  } catch (error) {
+    res.status(500).json({
+      timestamp: new Date().toISOString(),
+      error: error.message
+    });
+  }
+});
+
+// Rate limiting monitoring for testing
+router.get("/system/rate-limits", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const redisClient = (await import('../../config/redis.js')).default;
+
+    // Get all rate limit keys
+    const keys = await redisClient.keys('rate_limit:*');
+    const rateLimitData = [];
+
+    for (const key of keys.slice(0, 50)) { // Limit to first 50 for performance
+      try {
+        const value = await redisClient.get(key);
+        const ttl = await redisClient.ttl(key);
+
+        // Parse key to get user and endpoint info
+        const keyParts = key.split(':');
+        if (keyParts.length >= 3) {
+          rateLimitData.push({
+            userId: keyParts[2],
+            endpoint: keyParts[3] || 'unknown',
+            remaining: parseInt(value) || 0,
+            ttl: ttl,
+            expiresAt: ttl > 0 ? new Date(Date.now() + ttl * 1000).toISOString() : null
+          });
+        }
+      } catch (error) {
+        // Skip problematic keys
+        continue;
+      }
+    }
+
+    // Group by endpoint for summary
+    const endpointSummary = {};
+    rateLimitData.forEach(item => {
+      if (!endpointSummary[item.endpoint]) {
+        endpointSummary[item.endpoint] = { count: 0, lowRemaining: 0 };
+      }
+      endpointSummary[item.endpoint].count++;
+      if (item.remaining < 5) {
+        endpointSummary[item.endpoint].lowRemaining++;
+      }
+    });
+
+    res.json({
+      timestamp: new Date().toISOString(),
+      totalKeys: keys.length,
+      sampledData: rateLimitData,
+      endpointSummary,
+      limits: {
+        quizJoinAttempts: '20 per hour',
+        answerSubmissions: '1 per 15 seconds',
+        quizListRequests: '200 per minute'
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      timestamp: new Date().toISOString(),
+      error: error.message
+    });
+  }
+});
+
 // Advanced Analytics (QUIZ_ADMIN or SUPER_ADMIN)
 router.get("/analytics/overview", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
   try {
