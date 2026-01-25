@@ -58,7 +58,7 @@ router.get("/today", authRequired, async (req, res) => {
 
     // Check if quiz is live
     const isLive = quiz.state === 'LIVE';
-    const isCompleted = quiz.state === 'FINALIZED' || quiz.state === 'CLOSED';
+    const isCompleted = quiz.state === 'RESULT_PUBLISHED' || quiz.state === 'ENDED' || quiz.state === 'CLOSED';
     const userParticipated = !!attempt?.answersSaved;
 
     res.json({

@@ -125,12 +125,13 @@ router.post("/quiz", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, re
 
     const existingQuiz = await Quiz.findOne({ quizDate: today });
 
-    if (existingQuiz && ['LIVE', 'ENDED', 'RESULT_PUBLISHED'].includes(existingQuiz.state)) {
-      return res.status(400).json({ message: 'Cannot modify quiz that is already live or completed' });
+    // Only prevent modification if quiz is LIVE (currently running)
+    if (existingQuiz && existingQuiz.state === 'LIVE') {
+      return res.status(400).json({ message: 'Cannot modify quiz while it is live' });
     }
 
-    // Delete existing quiz if it's in DRAFT state (allows recreation)
-    if (existingQuiz && existingQuiz.state === 'DRAFT') {
+    // Delete existing quiz if it's in DRAFT, ENDED, or RESULT_PUBLISHED state (allows recreation)
+    if (existingQuiz && ['DRAFT', 'ENDED', 'RESULT_PUBLISHED'].includes(existingQuiz.state)) {
       await Quiz.deleteOne({ _id: existingQuiz._id });
     }
 
@@ -228,13 +229,13 @@ router.post("/quiz/upload", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), upload.
               return;
             }
 
-            // Delete existing quiz if it's in CREATED state
+            // Delete existing quiz if it's not currently LIVE
             const existingQuiz = await Quiz.findOne({ quizDate: today });
-            if (existingQuiz && ['LIVE', 'CLOSED', 'FINALIZED'].includes(existingQuiz.state)) {
-              resolve(res.status(400).json({ message: 'Cannot modify quiz that is already live or completed' }));
+            if (existingQuiz && existingQuiz.state === 'LIVE') {
+              resolve(res.status(400).json({ message: 'Cannot modify quiz while it is live' }));
               return;
             }
-            if (existingQuiz && existingQuiz.state === 'CREATED') {
+            if (existingQuiz && ['DRAFT', 'CREATED', 'CLOSED', 'ENDED', 'FINALIZED', 'RESULT_PUBLISHED'].includes(existingQuiz.state)) {
               await Quiz.deleteOne({ _id: existingQuiz._id });
             }
 
@@ -306,6 +307,24 @@ router.put("/quiz/:quizDate/end", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), a
     const quiz = await QuizService.endQuiz(req.params.quizDate);
     await logAdminAction(req.user._id, 'QUIZ_ENDED', 'QUIZ', req.params.quizDate, { status: 'CLOSED' }, req);
     res.json(quiz);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Delete quiz endpoint - allows admins to delete old/ended quizzes
+router.delete("/quiz/:quizDate", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const quiz = await Quiz.findOne({ quizDate: req.params.quizDate });
+    if (!quiz) {
+      return res.status(404).json({ message: 'Quiz not found' });
+    }
+    if (quiz.state === 'LIVE') {
+      return res.status(400).json({ message: 'Cannot delete quiz while it is live' });
+    }
+    await Quiz.deleteOne({ _id: quiz._id });
+    await logAdminAction(req.user._id, 'QUIZ_DELETED', 'QUIZ', req.params.quizDate, { state: quiz.state }, req);
+    res.json({ message: 'Quiz deleted successfully' });
   } catch (error) {
     res.status(400).json({ message: error.message });
   }

@@ -28,7 +28,7 @@ export async function recoverQuizState() {
       // Quiz should have been locked but didn't - recover
       console.log('Crash recovery: Locking quiz that should have been locked');
       await QuizService.lockQuiz(today);
-    } else if (quiz.state === 'CLOSED' && !quiz.finalizedAt) {
+    } else if ((quiz.state === 'ENDED' || quiz.state === 'CLOSED') && !quiz.finalizedAt) {
       // Winners not finalized - recover
       console.log('Crash recovery: Finalizing winners for completed quiz');
       await QuizService.finalizeWinners(today);

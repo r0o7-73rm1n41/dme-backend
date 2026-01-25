@@ -603,8 +603,8 @@ export async function finalizeWinners(quizDate) {
       throw new Error('Quiz not found');
     }
 
-    if (quiz.state !== 'CLOSED') {
-      await transitionQuiz(quizDate, 'CLOSED');
+    if (quiz.state !== 'ENDED') {
+      await transitionQuiz(quizDate, 'ENDED');
     }
 
     // Check if quiz can transition to FINALIZED
@@ -1080,7 +1080,7 @@ export async function endQuiz(quizDate) {
     return;
   }
 
-  await transitionQuiz(quizDate, 'CLOSED');
+  await transitionQuiz(quizDate, 'ENDED');
 
   // Stop advancement
   const interval = quizIntervals.get(quizDate);
