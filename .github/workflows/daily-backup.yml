@@ -150,7 +150,7 @@ jobs:
             service_account_json = f.read()
           service_account_info = json.loads(service_account_json)
           print('Service account loaded')
-          credentials = service_account.Credentials.from_service_account_info(service_account_info, scopes=['https://www.googleapis.com/auth/drive.file'])
+          credentials = service_account.Credentials.from_service_account_info(service_account_info, scopes=['https://www.googleapis.com/auth/drive'])
           request = google.auth.transport.requests.Request()
           print("Refreshing credentials...")
           credentials.refresh(request)
@@ -164,12 +164,11 @@ jobs:
           file_path = files[0]
           print('Found backup file: ' + file_path)
 
-          # Upload to Google Drive
-          folder_id = os.environ['GDRIVE_FOLDER_ID']
-          print('Uploading to folder: ' + folder_id)
+          # Upload to Google Drive Shared Drive
+          shared_drive_id = os.environ['GDRIVE_FOLDER_ID']
+          print('Uploading to Shared Drive: ' + shared_drive_id)
           metadata = {
-            'name': os.path.basename(file_path),
-            "driveId": folder_id
+            'name': os.path.basename(file_path)
           }
           files_payload = {
             'data': ('metadata', json.dumps(metadata), 'application/json; charset=UTF-8'),
@@ -177,7 +176,7 @@ jobs:
           }
           print("Sending upload request...")
           response = requests.post(
-            "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true",
+            f"https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&teamDriveId={shared_drive_id}",
             headers={'Authorization': "Bearer " + access_token},
             files=files_payload
           )
