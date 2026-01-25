@@ -102,6 +102,38 @@ class ObservabilityService {
     return data ? JSON.parse(data) : null;
   }
 
+  // Redis Fencing Failure Tracking
+  async recordRedisFencingFailure(quizDate, operation) {
+    const key = `fencing:failures:${quizDate}`;
+    const event = {
+      timestamp: new Date(),
+      operation, // 'finalize', 'start', 'end', etc.
+      token: await redisClient.get(`quiz:${quizDate}:${operation}`)
+    };
+
+    await redisClient.lpush(key, JSON.stringify(event));
+    await redisClient.expire(key, 86400 * 7); // Keep for 7 days
+
+    logger.warn('Redis fencing failure recorded', { quizDate, operation, event });
+  }
+
+  async getRedisFencingFailures(quizDate = null, limit = 50) {
+    let keys;
+    if (quizDate) {
+      keys = [`fencing:failures:${quizDate}`];
+    } else {
+      keys = await redisClient.keys('fencing:failures:*');
+    }
+
+    const failures = [];
+    for (const key of keys.slice(0, limit)) {
+      const events = await redisClient.lrange(key, 0, limit - 1);
+      failures.push(...events.map(event => JSON.parse(event)));
+    }
+
+    return failures.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  }
+
   // Anti-cheat Monitoring
   async recordAntiCheatEvent(userId, quizDate, eventType, details = {}) {
     const key = `anticheat:events:${quizDate}`;
