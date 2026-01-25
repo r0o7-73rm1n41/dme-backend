@@ -52,12 +52,13 @@ router.get("/quiz", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, res
     const total = await Quiz.countDocuments(filter);
 
     const formattedQuizzes = quizzes.map(quiz => ({
-      id: quiz._id.toString().slice(-7), // Short ID like d07f20
+      _id: quiz._id,
       title: quiz.title,
       description: quiz.description,
       questions: quiz.questions.length,
-      date: quiz.quizDate,
-      status: quiz.state,
+      quizDate: quiz.quizDate,
+      state: quiz.state,
+      classGrade: quiz.classGrade,
       createdAt: quiz.createdAt
     }));
 
