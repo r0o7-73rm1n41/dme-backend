@@ -138,21 +138,27 @@ jobs:
           import os
 
           # Load service account
+          print("Loading service account...")
           service_account_json = os.environ['SERVICE_ACCOUNT_JSON']
           service_account_info = json.loads(service_account_json)
-          credentials = service_account.Credentials.from_service_account_info(service_account_info, scopes=['https://www.googleapis.com/auth/drive'])
+          print("Service account loaded")
+          credentials = service_account.Credentials.from_service_account_info(service_account_info, scopes=['https://www.googleapis.com/auth/drive.file'])
           request = google.auth.transport.requests.Request()
+          print("Refreshing credentials...")
           credentials.refresh(request)
           access_token = credentials.token
+          print("Access token obtained")
 
           # Find the backup file
           files = glob.glob('full_backup_*.zip')
           if not files:
             raise Exception('No backup file found')
           file_path = files[0]
+          print(f"Found backup file: {file_path}")
 
           # Upload to Google Drive
           folder_id = os.environ['GDRIVE_FOLDER_ID']
+          print(f"Uploading to folder: {folder_id}")
           metadata = {
             'name': os.path.basename(file_path),
             'parents': [folder_id]
@@ -161,11 +167,13 @@ jobs:
             'data': ('metadata', json.dumps(metadata), 'application/json; charset=UTF-8'),
             'file': (os.path.basename(file_path), open(file_path, 'rb'), 'application/zip')
           }
+          print("Sending upload request...")
           response = requests.post(
             'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
             headers={'Authorization': f'Bearer {access_token}'},
             files=files_payload
           )
+          print(f"Response status: {response.status_code}")
           if response.status_code == 200:
             print('Upload successful')
             print('Response:', response.json())
