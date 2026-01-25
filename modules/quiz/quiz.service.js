@@ -92,9 +92,17 @@ export async function recoverQuizAdvancement() {
           }
         } else {
           console.log(`Quiz ${today}: Reached final question, stopping advancement`);
-          // Quiz finished advancing
+          // Quiz finished advancing - end the quiz
           clearInterval(interval);
           quizIntervals.delete(today);
+          
+          // End the quiz automatically when it reaches the final question
+          try {
+            await endQuiz(today);
+            console.log(`Quiz ${today}: Automatically ended after reaching final question`);
+          } catch (error) {
+            console.error(`Error ending quiz ${today}:`, error);
+          }
         }
       } catch (error) {
         console.error('Error advancing question:', error);
