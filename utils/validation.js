@@ -284,7 +284,7 @@ export const blogSchemas = {
 
     content: Joi.string()
       .trim()
-      .min(50)
+      .min(20)
       .max(10000) // 300 words approx
       .required(),
 
@@ -306,7 +306,7 @@ export const blogSchemas = {
 
     content: Joi.string()
       .trim()
-      .min(50)
+      .min(20)
       .max(10000)
       .optional(),
 
