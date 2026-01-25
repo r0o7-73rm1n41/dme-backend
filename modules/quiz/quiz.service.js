@@ -1184,8 +1184,7 @@ export async function submitAnswer(userId, questionId, selectedOptionIndex, devi
   }
 
   // Check if user has paid for today
-  const PaymentService = (await import('../payment/payment.service.js')).default;
-  const hasPaid = await PaymentService.isUserEligible(userId, today);
+  const hasPaid = await isUserEligible(userId, today);
 
   // Find the question by _id
   const question = quiz.questions.find(q => q._id.toString() === questionId);
