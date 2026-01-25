@@ -60,7 +60,7 @@ jobs:
       - name: Cloudinary Backup
         run: |
           TIMESTAMP=$(date +'%F_%H-%M')
-          npm install -g cloudinary
+          npm install cloudinary
           mkdir -p backup/cloudinary
           node -e "
             const cloudinary = require('cloudinary').v2;
