@@ -162,11 +162,11 @@ jobs:
           if not files:
             raise Exception('No backup file found')
           file_path = files[0]
-          print(f"Found backup file: {file_path}")
+          print('Found backup file: ' + file_path)
 
           # Upload to Google Drive
           folder_id = os.environ['GDRIVE_FOLDER_ID']
-          print(f"Uploading to folder: {folder_id}")
+          print('Uploading to folder: ' + folder_id)
           metadata = {
             'name': os.path.basename(file_path),
             'parents': [folder_id]
@@ -181,12 +181,12 @@ jobs:
             headers={'Authorization': f'Bearer {access_token}'},
             files=files_payload
           )
-          print(f"Response status: {response.status_code}")
+          print('Response status: ' + str(response.status_code))
           if response.status_code == 200:
             print('Upload successful')
             print('Response:', response.json())
           else:
-            print(f'Upload failed: {response.status_code}')
+            print('Upload failed: ' + str(response.status_code))
             print('Response:', response.text)
             exit(1)
           "
