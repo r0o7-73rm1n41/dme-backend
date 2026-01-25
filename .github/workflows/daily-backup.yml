@@ -33,7 +33,7 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip wget curl mongodb-clients redis-tools nodejs npm
+          sudo apt-get install -y zip wget curl mongodb-database-tools redis-tools nodejs npm
 
       - name: Create Backup Directory
         run: mkdir backup
