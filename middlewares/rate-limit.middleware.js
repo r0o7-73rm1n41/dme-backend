@@ -123,9 +123,9 @@ export const readRateLimit = rateLimit(60 * 1000, 300, 'read'); // 300 requests 
 export const writeRateLimit = rateLimit(60 * 1000, 100, 'write'); // 100 requests per minute
 
 // QUIZ ENDPOINTS - Specific limits
-export const quizAttemptRateLimit = rateLimit(60 * 60 * 1000, 5, 'quiz_attempt'); // 5 quiz attempts per hour per user
-export const quizAnswerRateLimit = rateLimit(10 * 1000, 1, 'quiz_answer'); // 1 answer per 10 seconds per user (max 6 per minute)
-export const quizListRateLimit = rateLimit(60 * 1000, 120, 'quiz_list'); // 120 requests per minute (increased for active quiz polling)
+export const quizAttemptRateLimit = rateLimit(60 * 60 * 1000, 20, 'quiz_attempt'); // 20 quiz attempts per hour per user
+export const quizAnswerRateLimit = rateLimit(15 * 1000, 1, 'quiz_answer'); // 1 answer per 15 seconds per user (max 4 per minute)
+export const quizListRateLimit = rateLimit(60 * 1000, 200, 'quiz_list'); // 200 requests per minute (increased for active quiz polling)
 
 // BLOG ENDPOINTS - Balanced limits
 export const blogViewRateLimit = rateLimit(60 * 1000, 200, 'blog_view'); // 200 blog views per minute

@@ -18,6 +18,18 @@ const quizSchema = new mongoose.Schema(
       index: true
     },
 
+    title: {
+      type: String,
+      default: 'Daily Quiz',
+      trim: true
+    },
+
+    description: {
+      type: String,
+      default: 'Daily 50 Question Quiz',
+      trim: true
+    },
+
     state: {
       type: String,
       enum: ["DRAFT", "SCHEDULED", "LOCKED", "LIVE", "ENDED", "RESULT_PUBLISHED"],

@@ -31,6 +31,102 @@ const upload = multer({
 // Apply admin role check to all routes
 router.use(authRequired, roleRequired(["QUIZ_ADMIN", "CONTENT_ADMIN", "SUPER_ADMIN"]));
 
+// Get all quizzes for admin management
+router.get("/quiz", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const { page = 1, limit = 50, status } = req.query;
+    const skip = (page - 1) * limit;
+
+    let filter = {};
+    if (status) {
+      filter.state = status;
+    }
+
+    const quizzes = await Quiz.find(filter)
+      .sort({ quizDate: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .select('quizDate title description questions state classGrade createdAt')
+      .lean();
+
+    const total = await Quiz.countDocuments(filter);
+
+    const formattedQuizzes = quizzes.map(quiz => ({
+      id: quiz._id.toString().slice(-7), // Short ID like d07f20
+      title: quiz.title,
+      description: quiz.description,
+      questions: quiz.questions.length,
+      date: quiz.quizDate,
+      status: quiz.state,
+      createdAt: quiz.createdAt
+    }));
+
+    res.json({
+      quizzes: formattedQuizzes,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Get quizzes error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Edit quiz (update title, description, classGrade)
+router.put("/quiz/:quizDate", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const { quizDate } = req.params;
+    const { title, description, classGrade } = req.body;
+
+    const now = new Date();
+    const istTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
+    const lockTime = new Date(istTime);
+    lockTime.setHours(19, 50, 0, 0); // 7:50 PM IST
+
+    // Prevent quiz modification after 7:50 PM IST for today's quiz
+    if (quizDate === new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) && istTime >= lockTime) {
+      return res.status(400).json({
+        message: 'Quiz questions are locked after 7:50 PM IST. No modifications allowed.'
+      });
+    }
+
+    const quiz = await Quiz.findOne({ quizDate });
+
+    if (!quiz) {
+      return res.status(404).json({ message: 'Quiz not found' });
+    }
+
+    // Only prevent modification if quiz is LIVE (currently running)
+    if (quiz.state === 'LIVE') {
+      return res.status(400).json({ message: 'Cannot modify quiz while it is live' });
+    }
+
+    // Validate classGrade
+    if (classGrade && !['10th', '12th', 'Other', 'ALL'].includes(classGrade)) {
+      return res.status(400).json({
+        message: 'Invalid classGrade. Must be one of: 10th, 12th, Other, ALL'
+      });
+    }
+
+    // Update allowed fields
+    if (title !== undefined) quiz.title = title;
+    if (description !== undefined) quiz.description = description;
+    if (classGrade !== undefined) quiz.classGrade = classGrade;
+
+    await quiz.save();
+
+    await logAdminAction(req.user._id, 'QUIZ_UPDATED', 'QUIZ', quiz.quizDate, { title: quiz.title, description: quiz.description }, req);
+    res.json(quiz);
+  } catch (error) {
+    console.error('Quiz update error:', error);
+    res.status(400).json({ message: error.message });
+  }
+});
+
 // Bulk create questions (QUIZ_ADMIN or SUPER_ADMIN)
 router.post("/questions/bulk", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
   try {
@@ -75,29 +171,33 @@ router.post("/questions/bulk", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), asyn
 // Quiz management (QUIZ_ADMIN or SUPER_ADMIN)
 router.post("/quiz", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, res) => {
   try {
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const { quizDate, title, description, questions, classGrade } = req.body;
+    
+    // Use provided quizDate or default to today
+    const targetDate = quizDate || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    
     const now = new Date();
     const istTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
     const lockTime = new Date(istTime);
     lockTime.setHours(19, 50, 0, 0); // 7:50 PM IST
 
-    // Prevent quiz creation/modification after 7:50 PM IST
-    if (istTime >= lockTime) {
+    // Prevent quiz creation/modification after 7:50 PM IST for today's quiz
+    if (targetDate === new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) && istTime >= lockTime) {
       return res.status(400).json({
         message: 'Quiz questions are locked after 7:50 PM IST. No modifications allowed.'
       });
     }
 
     // Validate that exactly 50 question IDs are provided
-    if (!req.body.questions || !Array.isArray(req.body.questions) || req.body.questions.length !== 50) {
+    if (!questions || !Array.isArray(questions) || questions.length !== 50) {
       return res.status(400).json({
         message: 'Quiz must have exactly 50 question IDs. Please provide all 50 question IDs.'
       });
     }
 
     // Validate that all questions are valid ObjectIds and exist
-    for (let i = 0; i < req.body.questions.length; i++) {
-      const questionId = req.body.questions[i];
+    for (let i = 0; i < questions.length; i++) {
+      const questionId = questions[i];
       if (!mongoose.Types.ObjectId.isValid(questionId)) {
         return res.status(400).json({
           message: `Question ID ${i + 1} is not a valid ObjectId: ${questionId}`
@@ -107,23 +207,23 @@ router.post("/quiz", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, re
 
     // Verify all questions exist
     const existingQuestions = await Question.find({
-      _id: { $in: req.body.questions }
+      _id: { $in: questions }
     });
 
-    if (existingQuestions.length !== req.body.questions.length) {
+    if (existingQuestions.length !== questions.length) {
       return res.status(400).json({
-        message: `Some questions do not exist. Found ${existingQuestions.length} out of ${req.body.questions.length} questions.`
+        message: `Some questions do not exist. Found ${existingQuestions.length} out of ${questions.length} questions.`
       });
     }
 
     // Validate classGrade
-    if (req.body.classGrade && !['10th', '12th', 'Other', 'ALL'].includes(req.body.classGrade)) {
+    if (classGrade && !['10th', '12th', 'Other', 'ALL'].includes(classGrade)) {
       return res.status(400).json({
         message: 'Invalid classGrade. Must be one of: 10th, 12th, Other, ALL'
       });
     }
 
-    const existingQuiz = await Quiz.findOne({ quizDate: today });
+    const existingQuiz = await Quiz.findOne({ quizDate: targetDate });
 
     // Only prevent modification if quiz is LIVE (currently running)
     if (existingQuiz && existingQuiz.state === 'LIVE') {
@@ -137,13 +237,15 @@ router.post("/quiz", roleRequired(["QUIZ_ADMIN", "SUPER_ADMIN"]), async (req, re
 
     // Create quiz with question IDs
     const quiz = await Quiz.create({
-      quizDate: today,
-      questions: req.body.questions,
+      quizDate: targetDate,
+      title: title || 'Daily Quiz',
+      description: description || 'Daily 50 Question Quiz',
+      questions: questions,
       state: 'SCHEDULED',
-      classGrade: req.body.classGrade || 'ALL',
+      classGrade: classGrade || 'ALL',
     });
 
-    await logAdminAction(req.user._id, 'QUIZ_CREATED', 'QUIZ', quiz.quizDate, { questionsCount: quiz.questions.length }, req);
+    await logAdminAction(req.user._id, 'QUIZ_CREATED', 'QUIZ', quiz.quizDate, { questionsCount: quiz.questions.length, title: quiz.title }, req);
     res.json(quiz);
   } catch (error) {
     console.error('Quiz creation error:', error);
