@@ -814,11 +814,12 @@ router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
       console.log(`Processing user: ${plainUser.name}, class: ${plainUser.class}, type: ${typeof plainUser.class}`);
       
       // Add classGrade field
-      if (plainUser.class === '10') {
+      let classValue = plainUser.class;
+      if (classValue === 10 || classValue === '10') {
         plainUser.classGrade = '10th';
-      } else if (plainUser.class === '12') {
+      } else if (classValue === 12 || classValue === '12') {
         plainUser.classGrade = '12th';
-      } else if (plainUser.class === 'Other') {
+      } else if (classValue === 'Other') {
         plainUser.classGrade = 'Other';
       } else {
         plainUser.classGrade = 'N/A';
