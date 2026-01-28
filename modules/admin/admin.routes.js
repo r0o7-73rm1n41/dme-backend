@@ -799,25 +799,39 @@ router.get("/dashboard", authRequired, roleRequired(["QUIZ_ADMIN", "CONTENT_ADMI
 // Get all users
 router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
   try {
+    console.log('📍 /admin/users endpoint called');
     const users = await User.find({}, '-password').sort({ createdAt: -1 });
+    console.log(`Found ${users.length} users`);
     
-    // Convert to plain objects and add classGrade
-    const usersData = users.map(user => {
-      const userObj = user.toObject();
+    // Convert each user to plain object with classGrade field
+    const usersData = [];
+    
+    for (let i = 0; i < users.length; i++) {
+      const user = users[i];
+      const plainUser = JSON.parse(JSON.stringify(user));
       
-      // Add classGrade based on class field
-      if (userObj.class === '10') {
-        userObj.classGrade = '10th';
-      } else if (userObj.class === '12') {
-        userObj.classGrade = '12th';
-      } else if (userObj.class === 'Other') {
-        userObj.classGrade = 'Other';
-      } else {
-        userObj.classGrade = 'N/A';
+      console.log(`Processing user: ${plainUser.name}, class: ${plainUser.class}`);
+      
+      // Add classGrade field
+      switch(plainUser.class) {
+        case '10':
+          plainUser.classGrade = '10th';
+          break;
+        case '12':
+          plainUser.classGrade = '12th';
+          break;
+        case 'Other':
+          plainUser.classGrade = 'Other';
+          break;
+        default:
+          plainUser.classGrade = 'N/A';
       }
       
-      return userObj;
-    });
+      console.log(`  -> classGrade: ${plainUser.classGrade}`);
+      usersData.push(plainUser);
+    }
+    
+    console.log('✅ Sending response with classGrade fields');
     
     res.json({ 
       users: usersData,
@@ -829,7 +843,7 @@ router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching users:', error);
+    console.error('❌ Error fetching users:', error);
     res.status(500).json({ message: error.message });
   }
 });
