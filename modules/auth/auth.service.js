@@ -374,7 +374,7 @@ export async function updateProfile(userId, updates) {
           } else if (updates.classGrade === '12th') {
             classValue = '12';
           } else if (updates.classGrade === 'Other') {
-            classValue = null;
+            classValue = 'Other';
           }
           user.class = classValue;
         } else {
