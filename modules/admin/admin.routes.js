@@ -798,6 +798,7 @@ router.get("/dashboard", authRequired, roleRequired(["QUIZ_ADMIN", "CONTENT_ADMI
 
 // Get all users
 router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
+  console.log('🚨 /admin/users endpoint HIT!');
   try {
     console.log('📍 /admin/users endpoint called');
     const users = await User.find({}, '-password').sort({ createdAt: -1 });
@@ -808,26 +809,22 @@ router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
     
     for (let i = 0; i < users.length; i++) {
       const user = users[i];
-      const plainUser = JSON.parse(JSON.stringify(user));
+      const plainUser = user.toObject();
       
-      console.log(`Processing user: ${plainUser.name}, class: ${plainUser.class}`);
+      console.log(`Processing user: ${plainUser.name}, class: ${plainUser.class}, type: ${typeof plainUser.class}`);
       
       // Add classGrade field
-      switch(plainUser.class) {
-        case '10':
-          plainUser.classGrade = '10th';
-          break;
-        case '12':
-          plainUser.classGrade = '12th';
-          break;
-        case 'Other':
-          plainUser.classGrade = 'Other';
-          break;
-        default:
-          plainUser.classGrade = 'N/A';
+      if (plainUser.class === '10') {
+        plainUser.classGrade = '10th';
+      } else if (plainUser.class === '12') {
+        plainUser.classGrade = '12th';
+      } else if (plainUser.class === 'Other') {
+        plainUser.classGrade = 'Other';
+      } else {
+        plainUser.classGrade = 'N/A';
       }
       
-      console.log(`  -> classGrade: ${plainUser.classGrade}`);
+      console.log(`  -> classGrade set to: ${plainUser.classGrade}`);
       usersData.push(plainUser);
     }
     
