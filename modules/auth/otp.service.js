@@ -76,8 +76,8 @@ export async function verifyOtp(key, otp, expectedPurpose) {
     parsed = data;
   }
 
-  // Check purpose
-  if (parsed.purpose !== expectedPurpose) {
+  // Check purpose (case-insensitive comparison)
+  if (parsed.purpose.toUpperCase() !== expectedPurpose.toUpperCase()) {
     throw new Error("Invalid OTP purpose");
   }
 
