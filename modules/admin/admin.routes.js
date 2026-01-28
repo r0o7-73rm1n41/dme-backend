@@ -516,55 +516,6 @@ router.delete("/users/:userId", roleRequired(["SUPER_ADMIN"]), async (req, res) 
   }
 });
 
-router.post("/users/:userId/block", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
-  try {
-    const user = await User.findById(req.params.userId);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    user.isBlocked = true;
-    await user.save();
-
-    await logAdminAction(req.user._id, 'USER_BLOCKED', 'USER', user._id, { reason: req.body.reason }, req);
-    res.json({ success: true, message: 'User blocked successfully' });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-router.post("/users/:userId/unblock", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
-  try {
-    const user = await User.findById(req.params.userId);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    user.isBlocked = false;
-    await user.save();
-
-    await logAdminAction(req.user._id, 'USER_UNBLOCKED', 'USER', user._id, {}, req);
-    res.json({ success: true, message: 'User unblocked successfully' });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-router.delete("/users/:userId", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
-  try {
-    const user = await User.findById(req.params.userId);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    // Soft delete - mark as blocked and anonymize
-    user.isBlocked = true;
-    user.name = 'Deleted User';
-    user.phone = null;
-    user.email = null;
-    await user.save();
-
-    await logAdminAction(req.user._id, 'USER_DELETED', 'USER', user._id, {}, req);
-    res.json({ success: true, message: 'User deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
 // Payments (SUPER_ADMIN only)
 router.get("/payments", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
   try {

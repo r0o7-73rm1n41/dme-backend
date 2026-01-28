@@ -34,7 +34,6 @@ router.post("/password/reset", authRateLimit, AuthController.resetPassword);
 router.get("/me", authRequired, AuthController.getCurrentUser);
 router.post("/fcm-token", authRequired, writeRateLimit, AuthController.registerFCMToken);
 router.post("/password/reset-request", authRateLimit, AuthController.requestPasswordReset);
-router.post("/password/reset", authRateLimit, AuthController.resetPassword);
 router.put("/profile", authRequired, writeRateLimit, upload.single('profileImage'), AuthController.updateProfile);
 router.delete("/account", authRequired, writeRateLimit, AuthController.deleteAccount);
 
