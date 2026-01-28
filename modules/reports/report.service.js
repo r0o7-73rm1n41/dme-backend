@@ -76,10 +76,15 @@ export async function unblockUser(blockerId, blockedId) {
 }
 
 export async function getUserReports(userId, status = 'pending') {
-  return await Report.find({
-    reportedUser: userId,
-    status
-  }).populate('reporter', 'name').populate('blog', 'title');
+  const query = { status };
+  if (userId) {
+    query.reportedUser = userId;
+  }
+  return await Report.find(query)
+    .populate('reporter', 'fullName username')
+    .populate('reportedUser', 'fullName username')
+    .populate('blog', 'title')
+    .sort({ createdAt: -1 });
 }
 
 export async function updateReportStatus(reportId, status, adminId) {
