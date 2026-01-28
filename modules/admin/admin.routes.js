@@ -805,14 +805,23 @@ router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
     const transformedUsers = users.map(user => {
       let classGrade = null;
       
-      // Handle class field transformation
+      // Debug: Log the class value
       if (user.class) {
-        if (user.class === '10') {
+        console.log(`User ${user.name} - class value:`, user.class, 'type:', typeof user.class);
+      }
+      
+      // Handle class field transformation - support both string and null
+      if (user.class && user.class !== null) {
+        const classStr = String(user.class).trim();
+        if (classStr === '10') {
           classGrade = '10th';
-        } else if (user.class === '12') {
+        } else if (classStr === '12') {
           classGrade = '12th';
-        } else if (user.class === 'Other') {
+        } else if (classStr === 'Other') {
           classGrade = 'Other';
+        } else {
+          console.log(`Unknown class value: "${classStr}"`);
+          classGrade = null;
         }
       }
       
@@ -822,7 +831,10 @@ router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
       };
     });
     
-    console.log('Returning users with classGrade:', transformedUsers.map(u => ({ id: u._id, name: u.name, class: u.class, classGrade: u.classGrade })));
+    console.log('✅ Returning users with classGrade:');
+    transformedUsers.forEach(u => {
+      console.log(`  - ${u.name}: class="${u.class}" -> classGrade="${u.classGrade}"`);
+    });
     
     res.json({ users: transformedUsers });
   } catch (error) {
