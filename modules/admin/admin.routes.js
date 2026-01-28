@@ -467,46 +467,6 @@ router.put("/blogs/:blogId/reject", roleRequired(["CONTENT_ADMIN", "SUPER_ADMIN"
   }
 });
 
-// User management (SUPER_ADMIN only)
-router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
-  try {
-    const { page = 1, limit = 20, search, role, status } = req.query;
-    const query = {};
-
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } }
-      ];
-    }
-
-    if (role) query.role = role;
-    if (status === 'blocked') query.isBlocked = true;
-    else if (status === 'active') query.isBlocked = false;
-
-    const users = await User.find(query)
-      .select('-passwordHash')
-      .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
-
-    const total = await User.countDocuments(query);
-
-    res.json({
-      users,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / limit)
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
 router.post("/users/:userId/block", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
   try {
     const user = await User.findById(req.params.userId);
@@ -556,46 +516,6 @@ router.delete("/users/:userId", roleRequired(["SUPER_ADMIN"]), async (req, res) 
   }
 });
 
-// User management (SUPER_ADMIN only)
-router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
-  try {
-    const { page = 1, limit = 20, search, role, status } = req.query;
-    const query = {};
-
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } }
-      ];
-    }
-
-    if (role) query.role = role;
-    if (status === 'blocked') query.isBlocked = true;
-    else if (status === 'active') query.isBlocked = false;
-
-    const users = await User.find(query)
-      .select('-passwordHash')
-      .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
-
-    const total = await User.countDocuments(query);
-
-    res.json({
-      users,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / limit)
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
 router.post("/users/:userId/block", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
   try {
     const user = await User.findById(req.params.userId);
@@ -640,14 +560,6 @@ router.delete("/users/:userId", roleRequired(["SUPER_ADMIN"]), async (req, res) 
 
     await logAdminAction(req.user._id, 'USER_DELETED', 'USER', user._id, {}, req);
     res.json({ success: true, message: 'User deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
-  try {
-    const users = await User.find().select('-passwordHash');
-    res.json(users);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
