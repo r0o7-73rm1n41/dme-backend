@@ -2,6 +2,11 @@
 import validator from 'validator';
 
 export const sanitizeInput = (req, res, next) => {
+  // Skip sanitization for CSV upload endpoint (file upload)
+  if (req.path === '/api/admin/quiz/upload' || req.path.includes('upload')) {
+    return next();
+  }
+
   // Sanitize string fields in req.body, req.query, req.params
   const sanitizeObject = (obj) => {
     for (let key in obj) {
