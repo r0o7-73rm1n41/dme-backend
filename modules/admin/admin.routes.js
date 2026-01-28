@@ -799,33 +799,35 @@ router.get("/dashboard", authRequired, roleRequired(["QUIZ_ADMIN", "CONTENT_ADMI
 // Get all users
 router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
   try {
-    const users = await User.find({}, '-password').sort({ createdAt: -1 }).lean();
+    const users = await User.find({}, '-password').sort({ createdAt: -1 });
     
-    // Add classGrade field to each user based on their class value
-    const usersWithGrade = users.map(user => {
-      let classGrade = 'N/A';
+    // Convert to plain objects and add classGrade
+    const usersData = users.map(user => {
+      const userObj = user.toObject();
       
-      // Map class to classGrade
-      switch(user.class) {
-        case '10':
-          classGrade = '10th';
-          break;
-        case '12':
-          classGrade = '12th';
-          break;
-        case 'Other':
-          classGrade = 'Other';
-          break;
-        default:
-          classGrade = 'N/A';
+      // Add classGrade based on class field
+      if (userObj.class === '10') {
+        userObj.classGrade = '10th';
+      } else if (userObj.class === '12') {
+        userObj.classGrade = '12th';
+      } else if (userObj.class === 'Other') {
+        userObj.classGrade = 'Other';
+      } else {
+        userObj.classGrade = 'N/A';
       }
       
-      // Add classGrade to the user object
-      user.classGrade = classGrade;
-      return user;
+      return userObj;
     });
     
-    res.json({ users: usersWithGrade });
+    res.json({ 
+      users: usersData,
+      pagination: {
+        page: 1,
+        limit: 20,
+        total: users.length,
+        pages: Math.ceil(users.length / 20)
+      }
+    });
   } catch (error) {
     console.error('Error fetching users:', error);
     res.status(500).json({ message: error.message });
