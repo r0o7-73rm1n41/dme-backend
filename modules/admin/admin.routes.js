@@ -805,29 +805,29 @@ router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
     console.log(`Found ${users.length} users`);
     
     // Convert each user to plain object with classGrade field
-    const usersData = [];
-    
-    for (let i = 0; i < users.length; i++) {
-      const user = users[i];
+    const usersData = users.map(user => {
       const plainUser = user.toObject();
       
       console.log(`Processing user: ${plainUser.name}, class: ${plainUser.class}, type: ${typeof plainUser.class}`);
       
       // Add classGrade field
       let classValue = plainUser.class;
+      let classGrade = 'N/A';
       if (classValue === 10 || classValue === '10') {
-        plainUser.classGrade = '10th';
+        classGrade = '10th';
       } else if (classValue === 12 || classValue === '12') {
-        plainUser.classGrade = '12th';
+        classGrade = '12th';
       } else if (classValue === 'Other') {
-        plainUser.classGrade = 'Other';
-      } else {
-        plainUser.classGrade = 'N/A';
+        classGrade = 'Other';
       }
       
-      console.log(`  -> classGrade set to: ${plainUser.classGrade}`);
-      usersData.push(plainUser);
-    }
+      console.log(`  -> classGrade set to: ${classGrade}`);
+      
+      return {
+        ...plainUser,
+        classGrade
+      };
+    });
     
     console.log('✅ Sending response with classGrade fields');
     
