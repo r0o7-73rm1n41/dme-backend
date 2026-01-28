@@ -117,10 +117,24 @@ export async function registerUser({ phone, email, otp, password, name, age, gen
     classValue = 'Other';
   }
 
-  const existing = await User.findOne({
-    $or: [{ phone: normalizedPhone }, { email }]
-  });
+  // Build query - only include email if provided and non-empty
+  let existingQuery;
+  if (email && email.trim()) {
+    existingQuery = {
+      $or: [{ phone: normalizedPhone }, { email: email.trim() }]
+    };
+  } else {
+    // Only search by phone if no email provided
+    existingQuery = { phone: normalizedPhone };
+  }
+  
+  const existing = await User.findOne(existingQuery);
   if (existing) {
+    // Only allow updating if it's the same user (same phone or email verified by OTP)
+    // Don't update unrelated admin accounts
+    if (existing.role && existing.role !== 'USER') {
+      throw new Error("This account is an admin account and cannot be re-registered");
+    }
     // Update existing user with new registration data
     existing.name = name;
     existing.passwordHash = await bcrypt.hash(password, 12);
@@ -181,6 +195,11 @@ export async function loginUser({ phone, password }) {
 
   const user = await User.findOne({ phone: normalizedPhone });
   if (!user) throw new Error("Invalid credentials");
+
+  // Only allow USER role to login via normal login (not admins)
+  if (user.role && user.role !== 'USER') {
+    throw new Error("Invalid credentials - admin accounts must use admin login");
+  }
 
   if (!user.isPhoneVerified) throw new Error("Phone number not verified. Please verify your phone number first.");
 
