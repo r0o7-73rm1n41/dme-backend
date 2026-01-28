@@ -801,35 +801,31 @@ router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
   try {
     const users = await User.find({}, '-password').sort({ createdAt: -1 }).lean();
     
-    // Transform class field to classGrade for frontend compatibility
-    const transformedUsers = users.map(user => {
-      // Ensure we always have classGrade field
-      let classGrade;
+    // Add classGrade field to each user based on their class value
+    const usersWithGrade = users.map(user => {
+      let classGrade = 'N/A';
       
-      // Handle different possible values of class field
-      const classValue = user.class;
-      
-      if (classValue === '10') {
-        classGrade = '10th';
-      } else if (classValue === '12') {
-        classGrade = '12th';
-      } else if (classValue === 'Other') {
-        classGrade = 'Other';
-      } else {
-        classGrade = 'N/A';  // Default to N/A if no class is set
+      // Map class to classGrade
+      switch(user.class) {
+        case '10':
+          classGrade = '10th';
+          break;
+        case '12':
+          classGrade = '12th';
+          break;
+        case 'Other':
+          classGrade = 'Other';
+          break;
+        default:
+          classGrade = 'N/A';
       }
       
-      // Return user with classGrade field explicitly added
-      const userData = { ...user };
-      userData.classGrade = classGrade;
-      
-      return userData;
+      // Add classGrade to the user object
+      user.classGrade = classGrade;
+      return user;
     });
     
-    console.log('DEBUG: Sending users with classGrade transformation');
-    console.log('Sample user:', { name: transformedUsers[0]?.name, class: transformedUsers[0]?.class, classGrade: transformedUsers[0]?.classGrade });
-    
-    res.json({ users: transformedUsers });
+    res.json({ users: usersWithGrade });
   } catch (error) {
     console.error('Error fetching users:', error);
     res.status(500).json({ message: error.message });
