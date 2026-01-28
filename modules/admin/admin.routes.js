@@ -803,38 +803,31 @@ router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
     
     // Transform class field to classGrade for frontend compatibility
     const transformedUsers = users.map(user => {
-      let classGrade = null;
+      // Ensure we always have classGrade field
+      let classGrade;
       
-      // Debug: Log the class value
-      if (user.class) {
-        console.log(`User ${user.name} - class value:`, user.class, 'type:', typeof user.class);
+      // Handle different possible values of class field
+      const classValue = user.class;
+      
+      if (classValue === '10') {
+        classGrade = '10th';
+      } else if (classValue === '12') {
+        classGrade = '12th';
+      } else if (classValue === 'Other') {
+        classGrade = 'Other';
+      } else {
+        classGrade = 'N/A';  // Default to N/A if no class is set
       }
       
-      // Handle class field transformation - support both string and null
-      if (user.class && user.class !== null) {
-        const classStr = String(user.class).trim();
-        if (classStr === '10') {
-          classGrade = '10th';
-        } else if (classStr === '12') {
-          classGrade = '12th';
-        } else if (classStr === 'Other') {
-          classGrade = 'Other';
-        } else {
-          console.log(`Unknown class value: "${classStr}"`);
-          classGrade = null;
-        }
-      }
+      // Return user with classGrade field explicitly added
+      const userData = { ...user };
+      userData.classGrade = classGrade;
       
-      return {
-        ...user,
-        classGrade: classGrade
-      };
+      return userData;
     });
     
-    console.log('✅ Returning users with classGrade:');
-    transformedUsers.forEach(u => {
-      console.log(`  - ${u.name}: class="${u.class}" -> classGrade="${u.classGrade}"`);
-    });
+    console.log('DEBUG: Sending users with classGrade transformation');
+    console.log('Sample user:', { name: transformedUsers[0]?.name, class: transformedUsers[0]?.class, classGrade: transformedUsers[0]?.classGrade });
     
     res.json({ users: transformedUsers });
   } catch (error) {
