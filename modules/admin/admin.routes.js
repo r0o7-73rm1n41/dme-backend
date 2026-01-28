@@ -802,10 +802,23 @@ router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
     const users = await User.find({}, '-password').sort({ createdAt: -1 }).lean();
     
     // Transform class field to classGrade for frontend compatibility
-    const transformedUsers = users.map(user => ({
-      ...user,
-      classGrade: user.class === '10' ? '10th' : user.class === '12' ? '12th' : 'Other'
-    }));
+    const transformedUsers = users.map(user => {
+      let classGrade;
+      if (user.class === '10') {
+        classGrade = '10th';
+      } else if (user.class === '12') {
+        classGrade = '12th';
+      } else if (user.class === 'Other') {
+        classGrade = 'Other';
+      } else {
+        classGrade = null;  // null or undefined if not set
+      }
+      
+      return {
+        ...user,
+        classGrade
+      };
+    });
     
     res.json(transformedUsers);
   } catch (error) {
