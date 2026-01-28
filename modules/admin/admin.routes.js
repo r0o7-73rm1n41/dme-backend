@@ -799,8 +799,15 @@ router.get("/dashboard", authRequired, roleRequired(["QUIZ_ADMIN", "CONTENT_ADMI
 // Get all users
 router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
   try {
-    const users = await User.find({}, '-password').sort({ createdAt: -1 });
-    res.json(users);
+    const users = await User.find({}, '-password').sort({ createdAt: -1 }).lean();
+    
+    // Transform class field to classGrade for frontend compatibility
+    const transformedUsers = users.map(user => ({
+      ...user,
+      classGrade: user.class === '10' ? '10th' : user.class === '12' ? '12th' : 'Other'
+    }));
+    
+    res.json(transformedUsers);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
