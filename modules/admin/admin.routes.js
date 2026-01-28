@@ -820,7 +820,7 @@ router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
       };
     });
     
-    res.json(transformedUsers);
+    res.json({ users: transformedUsers });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
