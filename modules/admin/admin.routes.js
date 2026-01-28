@@ -803,25 +803,30 @@ router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
     
     // Transform class field to classGrade for frontend compatibility
     const transformedUsers = users.map(user => {
-      let classGrade;
-      if (user.class === '10') {
-        classGrade = '10th';
-      } else if (user.class === '12') {
-        classGrade = '12th';
-      } else if (user.class === 'Other') {
-        classGrade = 'Other';
-      } else {
-        classGrade = null;  // null or undefined if not set
+      let classGrade = null;
+      
+      // Handle class field transformation
+      if (user.class) {
+        if (user.class === '10') {
+          classGrade = '10th';
+        } else if (user.class === '12') {
+          classGrade = '12th';
+        } else if (user.class === 'Other') {
+          classGrade = 'Other';
+        }
       }
       
       return {
         ...user,
-        classGrade
+        classGrade: classGrade
       };
     });
     
+    console.log('Returning users with classGrade:', transformedUsers.map(u => ({ id: u._id, name: u.name, class: u.class, classGrade: u.classGrade })));
+    
     res.json({ users: transformedUsers });
   } catch (error) {
+    console.error('Error fetching users:', error);
     res.status(500).json({ message: error.message });
   }
 });
