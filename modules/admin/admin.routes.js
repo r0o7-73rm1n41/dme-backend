@@ -801,35 +801,33 @@ router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
   console.log('🚨 /admin/users endpoint HIT!');
   try {
     console.log('📍 /admin/users endpoint called');
-    const users = await User.find({}, '-password').sort({ createdAt: -1 });
+    const users = await User.find({}, '-password').sort({ createdAt: -1 }).lean();
     console.log(`Found ${users.length} users`);
     
-    // Convert each user to plain object with classGrade field
+    // Add classGrade field to each user
     const usersData = users.map(user => {
-      const plainUser = user.toObject();
+      console.log(`Processing user: ${user.name}, class: ${user.class}`);
       
-      console.log(`Processing user: ${plainUser.name}, class: ${plainUser.class}, type: ${typeof plainUser.class}`);
-      
-      // Add classGrade field
-      let classValue = plainUser.class;
+      // Determine classGrade based on class value
       let classGrade = 'N/A';
-      if (classValue === 10 || classValue === '10') {
+      if (user.class === '10') {
         classGrade = '10th';
-      } else if (classValue === 12 || classValue === '12') {
+      } else if (user.class === '12') {
         classGrade = '12th';
-      } else if (classValue === 'Other') {
+      } else if (user.class === 'Other') {
         classGrade = 'Other';
       }
       
-      console.log(`  -> classGrade set to: ${classGrade}`);
+      console.log(`  -> classGrade: ${classGrade}`);
       
+      // Return user with classGrade field added
       return {
-        ...plainUser,
-        classGrade
+        ...user,
+        classGrade: classGrade
       };
     });
     
-    console.log('✅ Sending response with classGrade fields');
+    console.log('✅ All users processed, sending response');
     
     res.json({ 
       users: usersData,
@@ -841,7 +839,7 @@ router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ Error fetching users:', error);
+    console.error('❌ Error in /admin/users:', error);
     res.status(500).json({ message: error.message });
   }
 });
