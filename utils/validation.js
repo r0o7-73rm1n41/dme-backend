@@ -69,7 +69,7 @@ export const authSchemas = {
       .optional(),
 
     gender: Joi.string()
-      .valid('MALE', 'FEMALE', 'OTHER')
+      .valid('Male', 'Female', 'Other')
       .optional(),
 
     schoolName: Joi.string()
@@ -126,7 +126,7 @@ export const authSchemas = {
       .optional(),
 
     gender: Joi.string()
-      .valid('MALE', 'FEMALE', 'OTHER')
+      .valid('Male', 'Female', 'Other')
       .optional(),
 
     schoolName: Joi.string()
