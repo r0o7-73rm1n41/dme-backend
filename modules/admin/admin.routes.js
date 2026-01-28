@@ -798,36 +798,49 @@ router.get("/dashboard", authRequired, roleRequired(["QUIZ_ADMIN", "CONTENT_ADMI
 
 // Get all users
 router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
-  console.log('🚨 /admin/users endpoint HIT!');
+  console.log('\n\n🚨🚨🚨 /admin/users endpoint HIT! 🚨🚨🚨\n\n');
   try {
-    console.log('📍 /admin/users endpoint called');
+    // Disable all caching
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    
+    console.log('📍 Starting user fetch from database');
     const users = await User.find({}, '-password').sort({ createdAt: -1 }).lean();
-    console.log(`Found ${users.length} users`);
+    console.log(`📊 Found ${users.length} users in database`);
     
     // Add classGrade field to each user
     const usersData = users.map(user => {
-      console.log(`Processing user: ${user.name}, class: ${user.class}`);
+      let classGrade = 'N/A';
+      
+      // Log raw class value and type
+      console.log(`\n👤 Processing: ${user.name}`);
+      console.log(`   class value: "${user.class}", type: ${typeof user.class}`);
       
       // Determine classGrade based on class value
-      let classGrade = 'N/A';
       if (user.class === '10') {
         classGrade = '10th';
+        console.log(`   ✅ Matched class === '10'`);
       } else if (user.class === '12') {
         classGrade = '12th';
+        console.log(`   ✅ Matched class === '12'`);
       } else if (user.class === 'Other') {
         classGrade = 'Other';
+        console.log(`   ✅ Matched class === 'Other'`);
+      } else {
+        console.log(`   ❌ No match, setting to N/A`);
       }
       
-      console.log(`  -> classGrade: ${classGrade}`);
+      console.log(`   📌 Final classGrade: ${classGrade}`);
       
-      // Return user with classGrade field added
       return {
         ...user,
         classGrade: classGrade
       };
     });
     
-    console.log('✅ All users processed, sending response');
+    console.log(`\n✅ All ${usersData.length} users processed successfully`);
+    console.log(`📤 Sending response with classGrade fields`);
     
     res.json({ 
       users: usersData,
@@ -839,7 +852,7 @@ router.get("/users", roleRequired(["SUPER_ADMIN"]), async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ Error in /admin/users:', error);
+    console.error('❌ ERROR in /admin/users:', error);
     res.status(500).json({ message: error.message });
   }
 });
